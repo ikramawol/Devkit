@@ -2,7 +2,13 @@
 
 Set up a developer machine with one command, and move your whole setup to a new PC or OS.
 
-## Setup (Windows, PowerShell)
+## Install
+
+```powershell
+npm install -g devsetupkit-cli    # gives you the `dkit` command
+```
+
+## Setup from source (Windows, PowerShell)
 
 ```powershell
 cd Devkit
@@ -93,3 +99,7 @@ src/
 ```
 
 To add a tool, add one entry to `src/core/catalog.ts`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

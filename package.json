@@ -1,14 +1,25 @@
 {
-  "name": "dkit",
+  "name": "devsetupkit-cli",
   "version": "0.2.0",
-  "description": "Personal developer environment automation CLI",
+  "description": "Set up a developer machine with one command, and move your setup to a new PC or OS",
+  "license": "MIT",
+  "author": "ikramawol",
+  "keywords":["cli", "developer-tools", "setup", "winget", "homebrew", "migrate", "dotfiles"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ikramawol/Devkit.git"
+  },
   "type": "module",
   "bin": {
     "dkit": "dist/index.js"
   },
+  "files": [
+    "dist/**/*.js"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"
   },
