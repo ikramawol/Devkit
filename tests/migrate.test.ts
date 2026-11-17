@@ -99,6 +99,37 @@ test("a damaged backup is refused", async () => {
   await assert.rejects(restoreBackup(b, ctx), /Checksum mismatch/);
 });
 
+test("export skips synced skills, trash and dkit's own backup copies", () => {
+  const { platform, runner } = oldMachine();
+  const skills = path.join(platform.home, ".claude", "skills");
+  put(path.join(skills, "my-skill", "SKILL.md"), "mine");
+  put(path.join(skills, "synced", "abc_123", "big-skill", "SKILL.md"), "synced from account");
+  put(path.join(skills, "synced", ".bucket-abc_123"), "marker");
+  put(path.join(skills, ".trash", "1793-xyz", "SKILL.md"), "deleted");
+  put(path.join(platform.home, ".claude", "commands", "review.md.dkit-backup-2026-11-17T13-47-49"), "old copy");
+
+  const paths = createBackup({ runner, platform, log: silentLogger }).claude.files.map((f) => f.path);
+  assert.ok(paths.includes("skills/my-skill/SKILL.md"), "the user's own skill is kept");
+  assert.ok(paths.includes("commands/review.md"));
+  for (const p of paths) assert.ok(!/synced|\.trash|dkit-backup/.test(p), `should not export ${p}`);
+});
+
+test("restoring onto the same machine changes nothing", async () => {
+  const { platform, runner } = oldMachine();
+  // A settings file with no secrets, formatted the way Claude Code writes it (trailing newline, own spacing).
+  const claudeSettings = path.join(platform.home, ".claude", "settings.json");
+  const original = `{\n    "model": "opus",\n    "autoUpdatesChannel": "latest"\n}\n`;
+  put(claudeSettings, original);
+
+  const backup = validateBackup(JSON.parse(JSON.stringify(createBackup({ runner, platform, log: silentLogger }))));
+  const ctx = { ...engineCtx(runner, platform), select: async () => [], sections: ["claude" as const] };
+  const report = await restoreBackup(backup, { ...ctx, dryRun: true });
+
+  assert.ok(!report.written.includes(claudeSettings), "unchanged settings.json is not rewritten");
+  assert.deepEqual(report.backedUp, []);
+  assert.equal(readFileSync(claudeSettings, "utf8"), original);
+});
+
 test("redaction helpers", () => {
   const r = redactJson({ a: { apiKey: "x", name: "ok" }, headers: { Authorization: "Bearer y" } });
   assert.deepEqual(r.value, { a: { apiKey: REDACTED, name: "ok" }, headers: { Authorization: REDACTED } });

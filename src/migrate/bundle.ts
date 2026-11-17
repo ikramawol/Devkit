@@ -50,16 +50,26 @@ export function unbundle(f: BundledFile): Buffer {
   return buf;
 }
 
-/** Recursively collect files under `dir`, skipping anything over `maxBytes`. */
-export function collectDir(dir: string, prefix = "", maxBytes = 2 * 1024 * 1024): BundledFile[] {
+/** A copy that `writeWithBackup` left next to a file it replaced. */
+const DKIT_BACKUP_COPY = /\.dkit-backup-[\dT-]+$/;
+
+/**
+ * Recursively collect files under `dir`, skipping anything over `maxBytes`.
+ * Always skipped: hidden folders (.git, .trash, ...), node_modules, and dkit's own backup copies.
+ * `skip` lists further folders to leave out, as paths relative to `dir` with forward slashes.
+ */
+export function collectDir(dir: string, prefix = "", maxBytes = 2 * 1024 * 1024, skip: string[] = [], _rel = ""): BundledFile[] {
   if (!existsSync(dir)) return [];
   const out: BundledFile[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     const rel = path.join(prefix, entry.name);
+    const relInDir = _rel ? `${_rel}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
-      out.push(...collectDir(full, rel, maxBytes));
+      if (entry.name === "node_modules" || entry.name.startsWith(".") || skip.includes(relInDir)) continue;
+      out.push(...collectDir(full, rel, maxBytes, skip, relInDir));
+    } else if (DKIT_BACKUP_COPY.test(entry.name)) {
+      continue;
     } else if (entry.isFile() && statSync(full).size <= maxBytes) {
       out.push(bundleFile(rel, readFileSync(full)));
     }

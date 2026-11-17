@@ -27,6 +27,8 @@ const SKIP_GIT_KEY = /^(credential\.|http\..*extraheader|.*(token|password))/i;
 // What we take from ~/.claude. Sessions, history, caches and credentials stay behind.
 const CLAUDE_FILES = ["settings.json", "CLAUDE.md", "keybindings.json"];
 const CLAUDE_DIRS = ["commands", "agents", "skills", "output-styles"];
+// Inside those: skills Claude syncs from your account by itself (it re-downloads them after sign-in).
+const CLAUDE_SKIP: Record<string, string[]> = { skills: ["synced"] };
 
 export function createBackup(deps: ExportDeps): Backup {
   const { runner, platform, log } = deps;
@@ -117,14 +119,17 @@ export function createBackup(deps: ExportDeps): Backup {
       if (f.endsWith(".json")) {
         try {
           const { value, redacted } = redactJson(JSON.parse(buf.toString("utf8")));
-          if (redacted.length) notes.push(`Claude ${f}: removed secret values (${redacted.join(", ")}).`);
-          claude.files.push(bundleFile(f, Buffer.from(JSON.stringify(value, null, 2), "utf8")));
-          continue;
+          if (redacted.length) {
+            notes.push(`Claude ${f}: removed secret values (${redacted.join(", ")}).`);
+            claude.files.push(bundleFile(f, Buffer.from(JSON.stringify(value, null, 2) + "\n", "utf8")));
+            continue;
+          }
+          // Nothing secret: keep the exact bytes so an unchanged file restores as "unchanged".
         } catch { /* not valid JSON: carry as-is */ }
       }
       claude.files.push(bundleFile(f, buf));
     }
-    for (const d of CLAUDE_DIRS) claude.files.push(...collectDir(path.join(claudeDir, d), d));
+    for (const d of CLAUDE_DIRS) claude.files.push(...collectDir(path.join(claudeDir, d), d, undefined, CLAUDE_SKIP[d]));
 
     const cfg = read(path.join(platform.home, ".claude.json"));
     if (cfg) {
