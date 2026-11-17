@@ -1,16 +1,31 @@
-# dkit
+# devsetupkit-cli
+
+[![npm](https://img.shields.io/npm/v/devsetupkit-cli)](https://www.npmjs.com/package/devsetupkit-cli)
+[![license](https://img.shields.io/npm/l/devsetupkit-cli)](LICENSE)
 
 Set up a developer machine with one command, and move your whole setup to a new PC or OS.
 
 ## Install
 
+Needs Node.js 20 or newer.
+
 ```powershell
-npm install -g devsetupkit-cli    # gives you the `dkit` command
+npm install -g devsetupkit-cli
 ```
+
+The package is called `devsetupkit-cli`; the command it installs is **`dkit`**:
+
+```powershell
+dkit doctor          # see what's installed
+dkit --help          # all commands
+```
+
+Update with `npm install -g devsetupkit-cli@latest`, remove with `npm uninstall -g devsetupkit-cli`.
 
 ## Setup from source (Windows, PowerShell)
 
 ```powershell
+git clone https://github.com/ikramawol/Devkit.git
 cd Devkit
 npm install
 npm run build
@@ -83,7 +98,7 @@ Safety rules:
 
 ```
 npm run dev -- doctor     # run without building
-npm test                  # 12 tests on a fake machine; nothing is really installed
+npm test                  # tests run on a fake machine; nothing is really installed
 ```
 
 ```
