@@ -1,6 +1,6 @@
 {
   "name": "devsetupkit-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Set up a developer machine with one command, and move your setup to a new PC or OS",
   "license": "MIT",
   "author": "ikramawol",
