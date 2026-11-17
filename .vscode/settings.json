@@ -1,0 +1,4 @@
+{
+  // Use Git Credential Manager (ikramawol) instead of the GitHub account signed into VS Code
+  "github.gitAuthentication": false
+}
