@@ -7,7 +7,20 @@ import { EDITORS } from "../src/migrate/editors.js";
 test("every resource says what it is and where it lives", () => {
   for (const item of CATALOG) {
     assert.ok(item.description.length > 10, `${item.id} needs a description`);
-    assert.equal(item.kind, "machine", `${item.id}: all current tools are machine-level`);
+    if (item.kind === "machine") {
+      assert.ok(Object.keys(item.install).length, `${item.id}: a machine tool needs an installer`);
+      assert.equal(item.packages, undefined, `${item.id}: machine tools don't add packages to a project`);
+    } else {
+      assert.ok(item.packages?.deps?.length || item.packages?.dev?.length, `${item.id}: a project library needs packages`);
+      assert.deepEqual(item.install, {}, `${item.id}: project libraries use the project's package manager, not an OS installer`);
+    }
+  }
+});
+
+test("project libraries are level 2 on every OS", () => {
+  for (const os of ["windows", "macos", "linux"] as const) {
+    assert.equal(maturityOf(getItem("hono")!, os).level, 2);
+    assert.equal(maturityOf(getItem("drizzle")!, os).level, 2);
   }
 });
 

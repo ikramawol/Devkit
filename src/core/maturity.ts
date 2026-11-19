@@ -24,12 +24,15 @@ export interface Maturity {
 export function maturityOf(item: CatalogItem, os: OS): Maturity {
   const { command, commandOn, paths } = item.detect;
   const method = item.install[os];
+  // Project resources work the same everywhere: found in package.json, added with the package manager.
+  const projectPkgs = item.kind === "project" && !!(item.packages?.deps?.length || item.packages?.dev?.length);
   const has: Record<Capability, boolean> = {
     discover:
+      projectPkgs ||
       (!!command && (!commandOn || commandOn.includes(os))) ||
       !!paths?.[os]?.length ||
       (os === "windows" && method?.type === "winget"), // winget can always tell
-    install: !!method && method.type !== "manual",
+    install: projectPkgs || (!!method && method.type !== "manual"),
     configure: false, // no resource applies settings yet
     snapshot: !!item.snapshot?.length,
     maintain: false, // no update/uninstall yet

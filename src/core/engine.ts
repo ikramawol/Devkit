@@ -5,8 +5,19 @@ import { addToUserPath, describeMethod, runMethod } from "../adapters/methods.js
 import { CATALOG, getItem, requiresFor, type CatalogItem } from "./catalog.js";
 import { clearWingetCache, detectItem, type DetectDeps, type ToolStatus } from "./detect.js";
 import { checkPrereqs, describeFix, fixPrereq, type FixResult, type PrereqCheck } from "./prereqs.js";
+import {
+  addCommand, allPackages, describeAdd, detectInProject, pmRequires, readProject, type ProjectInfo,
+} from "./project.js";
 
-export interface EngineContext extends DetectDeps {
+/** Which project project-level resources (Hono, Kysely...) go into. */
+export interface ProjectTarget {
+  /** The folder that was checked (the current folder, or --project). */
+  projectDir?: string;
+  /** Set when that folder has a package.json. */
+  project?: ProjectInfo;
+}
+
+export interface EngineContext extends DetectDeps, ProjectTarget {
   log: Logger;
   confirm: Confirm;
   dryRun: boolean;
@@ -27,6 +38,11 @@ export interface InstallPlan {
   repair: CatalogItem[];
   /** Need a step only the user can do (BIOS, Windows update) before dkit can continue. */
   blocked: CatalogItem[];
+  /** Project resources to add to `project`, after the machine tools. */
+  projectAdd: CatalogItem[];
+  project?: ProjectInfo;
+  /** Project resources asked for, but there's no project to put them in. */
+  needsProject: CatalogItem[];
 }
 
 export type Outcome = "installed" | "set-up" | "needs-new-terminal" | "unverified" | "failed" | "skipped";
@@ -40,10 +56,11 @@ export interface InstallReport {
 
 const pendingPrereqs = (plan: InstallPlan, id: string) => (plan.prereqs[id] ?? []).filter((p) => !p.ok);
 
-export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
+export function buildPlan(ids: string[], ctx: DetectDeps & ProjectTarget): InstallPlan {
   const os = ctx.platform.os;
   const plan: InstallPlan = {
     toInstall: [], addedDeps: [], alreadyInstalled: [], manual: [], unknown: [], prereqs: {}, repair: [], blocked: [],
+    projectAdd: [], project: ctx.project, needsProject: [],
   };
   const statusCache = new Map<string, ToolStatus>();
   const status = (item: CatalogItem) => {
@@ -54,11 +71,30 @@ export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
   const picked = new Set(ids);
   const visited = new Set<string>();
 
+  /** Machine tools something needs: planned first, and marked as added when the user didn't pick them. */
+  const visitDeps = (deps: string[]) => {
+    for (const dep of deps) {
+      visit(dep);
+      const added = plan.toInstall.some((i) => i.id === dep);
+      if (added && !picked.has(dep) && !plan.addedDeps.includes(dep)) plan.addedDeps.push(dep);
+    }
+  };
+
   const visit = (id: string) => {
     if (visited.has(id)) return;
     visited.add(id);
     const item = getItem(id);
     if (!item) return void plan.unknown.push(id);
+
+    // Project resources go into package.json with the project's own package manager.
+    if (item.kind === "project") {
+      if (!ctx.project) return void plan.needsProject.push(item);
+      const s = detectInProject(item, ctx.project);
+      if (s.installed) return void plan.alreadyInstalled.push(s);
+      visitDeps(pmRequires(ctx.project.pm));
+      plan.projectAdd.push(item);
+      return;
+    }
 
     const checks = checkPrereqs(item, os, ctx.runner, prereqCache);
     if (checks.length) plan.prereqs[item.id] = checks;
@@ -74,11 +110,7 @@ export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
     }
     if (blocked) return void plan.blocked.push(item);
 
-    for (const dep of requiresFor(item, os)) {
-      visit(dep);
-      const added = plan.toInstall.some((i) => i.id === dep);
-      if (added && !picked.has(dep) && !plan.addedDeps.includes(dep)) plan.addedDeps.push(dep);
-    }
+    visitDeps(requiresFor(item, os));
 
     const method = item.install[os];
     if (!method) return void plan.manual.push({ item, url: "not available for this OS yet" });
@@ -122,11 +154,38 @@ export function printPlan(plan: InstallPlan, ctx: EngineContext) {
       log.info(`  • ${item.name}${dep}  ${c.dim(describeMethod(item.install[os]!))}`);
     }
   }
+  if (plan.projectAdd.length && plan.project) {
+    const p = plan.project;
+    log.info(c.bold(`\nWill add to ${p.name ?? p.dir}`) + c.dim(`  ${p.dir} · ${p.pm} (${p.pmReason})`));
+    for (const item of plan.projectAdd) {
+      const dev = item.packages?.dev?.length ? c.dim(` + dev: ${item.packages.dev.join(", ")}`) : "";
+      log.info(`  • ${item.name}  ${(item.packages?.deps ?? []).join(", ")}${dev}`);
+    }
+    for (const cmd of projectCommands(plan)) log.info(c.dim(`  runs: ${describeAdd(p.pm, cmd.packages, cmd.dev)}`));
+  }
+  if (plan.needsProject.length) {
+    const where = ctx.projectDir ?? process.cwd();
+    log.warn(
+      `${plan.needsProject.map((i) => i.name).join(", ")} ${plan.needsProject.length === 1 ? "goes" : "go"} into a project, ` +
+      `but there's no package.json in ${where}.\n` +
+      `  cd into your project, or use --project <folder>.`,
+    );
+  }
   if (plan.manual.length) {
     log.info(c.bold("\nInstall these yourself:"));
     for (const m of plan.manual) log.info(`  • ${m.item.name}  ${c.dim(m.url)}`);
   }
   if (plan.unknown.length) log.warn(`Unknown tool ids: ${plan.unknown.join(", ")} (see \`dkit list\`)`);
+}
+
+/** One `add` for regular packages and one for dev packages, so the lockfile is updated once each. */
+function projectCommands(plan: InstallPlan): { packages: string[]; dev: boolean }[] {
+  const deps = [...new Set(plan.projectAdd.flatMap((i) => i.packages?.deps ?? []))];
+  const dev = [...new Set(plan.projectAdd.flatMap((i) => i.packages?.dev ?? []))];
+  return [
+    ...(deps.length ? [{ packages: deps, dev: false }] : []),
+    ...(dev.length ? [{ packages: dev, dev: true }] : []),
+  ];
 }
 
 export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promise<InstallReport> {
@@ -206,6 +265,40 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
     report.results.push({ id: item.id, name: item.name, outcome });
     for (const n of item.notes ?? []) report.notes.push(`${item.name}: ${n}`);
   }
+
+  // ── Project resources, now that the package manager is surely installed ──
+  if (plan.projectAdd.length && plan.project) {
+    const p = plan.project;
+    const missingTool = pmRequires(p.pm).find((d) => failed.has(d));
+    if (missingTool) {
+      for (const item of plan.projectAdd)
+        report.results.push({ id: item.id, name: item.name, outcome: "skipped", message: `${missingTool} failed` });
+    } else {
+      runner.refreshPath();
+      const errors: string[] = [];
+      for (const cmd of projectCommands(plan)) {
+        log.step(`Adding to ${p.name ?? p.dir}: ${describeAdd(p.pm, cmd.packages, cmd.dev)}`);
+        const { command, args } = addCommand(p.pm, cmd.packages, cmd.dev);
+        const r = runner.run(command, args, { inherit: true, cwd: p.dir });
+        if (!r.ok) errors.push(r.error ?? `${p.pm} exited with ${r.code}`);
+      }
+      // Verify against package.json itself rather than trusting exit codes.
+      const after = readProject(p.dir, { pm: p.pm });
+      for (const item of plan.projectAdd) {
+        const s = after ? detectInProject(item, after) : undefined;
+        if (s?.installed) {
+          log.ok(`${item.name} ${s.version ?? ""}`);
+          report.results.push({ id: item.id, name: item.name, outcome: "installed" });
+          for (const n of item.notes ?? []) report.notes.push(`${item.name}: ${n}`);
+        } else {
+          const missing = allPackages(item).filter((pkg) => !(after && pkg in after.deps));
+          const message = errors[0] ?? `${missing.join(", ")} not in package.json`;
+          log.error(`${item.name}: ${message}`);
+          report.results.push({ id: item.id, name: item.name, outcome: "failed", message });
+        }
+      }
+    }
+  }
   return report;
 }
 
@@ -220,6 +313,7 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
   line(c.red("Failed:"), report.results.filter((r) => r.outcome === "failed").map((r) => `${r.name} (${r.message})`));
   line(c.red("Skipped:"), report.results.filter((r) => r.outcome === "skipped").map((r) => `${r.name} (${r.message})`));
   line(c.red("Needs you first:"), plan.blocked.map((i) => i.name));
+  line(c.red("No project to add to:"), plan.needsProject.map((i) => i.name));
   line("Install yourself:", plan.manual.map((m) => m.item.name));
   if (report.restartFor.length) {
     log.warn(c.bold(`Restart Windows to finish setting up: ${report.restartFor.join(", ")}`));
@@ -234,22 +328,28 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
 export async function installTools(ids: string[], ctx: EngineContext): Promise<InstallReport | null> {
   const plan = buildPlan(ids, ctx);
   printPlan(plan, ctx);
-  if (!plan.toInstall.length && !plan.repair.length) {
-    ctx.log.info("\nNothing to install.");
-    return { results: [], notes: [], restartFor: [] };
+  const noProject = plan.needsProject.map((i) => ({ id: i.id, name: i.name, outcome: "skipped" as const, message: "no project" }));
+  if (!plan.toInstall.length && !plan.repair.length && !plan.projectAdd.length) {
+    if (!noProject.length) ctx.log.info("\nNothing to install.");
+    return { results: noProject, notes: [], restartFor: [] };
   }
   if (ctx.dryRun) {
     ctx.log.info(c.dim("\n[dry-run] nothing was changed"));
     return null;
   }
-  const question = plan.toInstall.length
-    ? `\nInstall ${plan.toInstall.length} tool(s)?`
+  const parts = [
+    plan.toInstall.length ? `install ${plan.toInstall.length} tool(s)` : "",
+    plan.projectAdd.length ? `add ${plan.projectAdd.length} to ${plan.project?.name ?? "the project"}` : "",
+  ].filter(Boolean);
+  const question = parts.length
+    ? `\n${parts.join(" and ").replace(/^./, (ch) => ch.toUpperCase())}?`
     : `\nSet up what ${plan.repair.map((i) => i.name).join(", ")} needs?`;
   if (!(await ctx.confirm(question))) {
     ctx.log.warn("Cancelled. Nothing was changed.");
     return null;
   }
   const report = await executePlan(plan, ctx);
+  report.results.push(...noProject);
   printReport(report, plan, ctx.log);
   return report;
 }

@@ -36,7 +36,8 @@ export function createBackup(deps: ExportDeps): Backup {
 
   // 1. Tools from the catalog.
   log.step("Checking installed tools");
-  const tools = CATALOG.filter((i) => detectItem(i, deps).installed).map((i) => i.id);
+  // Machine tools only: project libraries live in each project's package.json, not on the machine.
+  const tools = CATALOG.filter((i) => i.kind === "machine" && detectItem(i, deps).installed).map((i) => i.id);
   log.ok(`${tools.length} tools: ${tools.join(", ")}`);
 
   // 2. Other apps (Windows): everything winget can see, minus what the catalog covers.

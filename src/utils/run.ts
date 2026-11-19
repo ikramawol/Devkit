@@ -12,6 +12,8 @@ export interface RunResult {
 export interface RunOptions {
   /** Show the program's output live (installers) instead of capturing it. */
   inherit?: boolean;
+  /** Folder to run in (e.g. a project, for `pnpm add`). Default: the current folder. */
+  cwd?: string;
 }
 
 /**
@@ -57,7 +59,7 @@ export function which(command: string): string | null {
 }
 
 export function run(command: string, args: string[] = [], opts?: RunOptions): RunResult {
-  const base = { encoding: "utf8" as const, stdio: stdio(opts), maxBuffer: 64 * 1024 * 1024 };
+  const base = { encoding: "utf8" as const, stdio: stdio(opts), maxBuffer: 64 * 1024 * 1024, cwd: opts?.cwd };
   if (!isWindows) return toResult(spawnSync(command, args, base));
 
   // Windows: `code`, `npm`, `npx` are .cmd shims that Node refuses to spawn

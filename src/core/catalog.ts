@@ -27,7 +27,10 @@ export interface Detect {
   paths?: Partial<Record<OS, string[]>>;
 }
 
-export type Category = "Essentials" | "Languages" | "Editors & AI" | "Databases" | "Tools";
+export type Category =
+  | "Essentials" | "Languages" | "Editors & AI" | "Databases" | "Tools"
+  // Project resources
+  | "Frameworks" | "Database libraries" | "Auth";
 
 /**
  * Where a resource lives.
@@ -44,6 +47,8 @@ export interface CatalogItem {
   description: string;
   /** What `dkit migrate` saves and restores for it. Kept honest by a test against src/migrate. */
   snapshot?: string[];
+  /** Project resources: the npm packages added to the project (`dev` = devDependencies). */
+  packages?: { deps?: string[]; dev?: string[] };
   category: Category;
   detect: Detect;
   install: Partial<Record<OS, Method>>;
@@ -150,6 +155,44 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "brew", formula: "python" },
       linux: { type: "apt", packages: ["python3", "python3-pip", "python3-venv"] },
     },
+  },
+  {
+    id: "pnpm",
+    name: "pnpm",
+    kind: "machine",
+    description: "Fast, disk-efficient package manager for Node.js projects.",
+    category: "Languages",
+    detect: { command: "pnpm", versionArgs: ["--version"] },
+    install: npmGlobal("pnpm"),
+    requires: { all: ["node"] },
+  },
+  {
+    id: "yarn",
+    name: "Yarn",
+    kind: "machine",
+    description: "Package manager for Node.js projects.",
+    category: "Languages",
+    detect: { command: "yarn", versionArgs: ["--version"] },
+    install: npmGlobal("yarn"),
+    requires: { all: ["node"] },
+  },
+  {
+    id: "bun",
+    name: "Bun",
+    kind: "machine",
+    description: "JavaScript runtime, package manager and test runner in one, a fast alternative to Node.js.",
+    category: "Languages",
+    detect: {
+      command: "bun",
+      versionArgs: ["--version"],
+      paths: { windows: ["%USERPROFILE%\\.bun\\bin\\bun.exe"], macos: ["~/.bun/bin/bun"], linux: ["~/.bun/bin/bun"] },
+    },
+    install: {
+      windows: { type: "winget", id: "Oven-sh.Bun" },
+      macos: { type: "brew", tap: "oven-sh/bun", formula: "bun" },
+      linux: { type: "script", shell: "bash", script: "curl -fsSL https://bun.sh/install | bash" },
+    },
+    notes: ["Open a new terminal so `bun` is on your PATH."],
   },
 
   // ── Editors & AI ────────────────────────────────────────────
@@ -334,9 +377,76 @@ export const CATALOG: CatalogItem[] = [
     requires: { all: ["node"] },
     notes: ["Tip: most projects pin ESLint in package.json. The VS Code extension is dbaeumer.vscode-eslint."],
   },
+
+  // ── Project resources: added to one project with its package manager ──
+  {
+    id: "hono",
+    name: "Hono",
+    kind: "project",
+    description: "Small, fast web framework for APIs that runs on Node.js, Bun, Deno and edge platforms.",
+    category: "Frameworks",
+    detect: {},
+    install: {},
+    packages: { deps: ["hono"] },
+  },
+  {
+    id: "better-auth",
+    name: "Better Auth",
+    kind: "project",
+    description: "Authentication library for TypeScript: email/password, OAuth, sessions.",
+    category: "Auth",
+    detect: {},
+    install: {},
+    packages: { deps: ["better-auth"] },
+    notes: ["Set BETTER_AUTH_SECRET and BETTER_AUTH_URL in your .env, then follow https://www.better-auth.com/docs/installation"],
+  },
+  {
+    id: "kysely",
+    name: "Kysely",
+    kind: "project",
+    description: "Type-safe SQL query builder for TypeScript.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { deps: ["kysely"] },
+    notes: ["Kysely also needs a database driver, e.g. `pg` for PostgreSQL."],
+  },
+  {
+    id: "drizzle",
+    name: "Drizzle ORM",
+    kind: "project",
+    description: "TypeScript ORM with SQL-like queries, plus drizzle-kit for migrations.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { deps: ["drizzle-orm"], dev: ["drizzle-kit"] },
+    notes: ["Drizzle also needs a database driver, e.g. `pg` for PostgreSQL."],
+  },
+  {
+    id: "prisma",
+    name: "Prisma",
+    kind: "project",
+    description: "TypeScript ORM with a schema file, generated client and migrations.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { deps: ["@prisma/client"], dev: ["prisma"] },
+    notes: ["Run `npx prisma init` to create the schema and .env."],
+  },
+  {
+    id: "dbmate",
+    name: "dbmate",
+    kind: "project",
+    description: "Plain-SQL database migrations that work with any language or framework.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { dev: ["dbmate"] },
+    notes: ["Set DATABASE_URL, then `npx dbmate new <name>` and `npx dbmate up`."],
+  },
 ];
 
-export const CATEGORIES: Category[] = ["Essentials", "Languages", "Editors & AI", "Databases", "Tools"];
+export const CATEGORIES: Category[] = ["Essentials", "Languages", "Editors & AI", "Databases", "Tools", "Frameworks", "Database libraries", "Auth"];
 
 export function getItem(id: string): CatalogItem | undefined {
   return CATALOG.find((i) => i.id === id);

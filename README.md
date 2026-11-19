@@ -86,12 +86,35 @@ Today every tool is at L2 on Windows. `+S` marks tools whose settings already mo
 | Group | Tools (id) |
 |---|---|
 | Essentials | Git (`git`), Git Bash (`git-bash`), OpenSSH (`openssh`), GitHub CLI (`gh`) |
-| Languages | Node.js + npm (`node`), Python (`python`) |
+| Languages | Node.js + npm (`node`), Python (`python`), pnpm (`pnpm`), Yarn (`yarn`), Bun (`bun`) |
 | Editors & AI | VS Code (`vscode`), Antigravity (`antigravity`), Claude Code (`claude`), Codex CLI (`codex`) |
 | Databases | PostgreSQL 17 (`postgresql`), pgAdmin (`pgadmin`), MongoDB (`mongodb`), MongoDB Compass (`compass`) |
 | Tools | Docker (`docker`), Postman (`postman`), Prettier (`prettier`), ESLint (`eslint`) |
 
 Windows uses winget (plus the official Claude Code installer and npm). macOS uses Homebrew. Linux uses apt; tools with no apt package show a download link.
+
+## Add libraries to a project
+
+Libraries like Hono or Kysely belong to a project, not to your computer, so dkit adds them to the project's `package.json` with the project's own package manager.
+
+```powershell
+cd my-api
+dkit install hono kysely dbmate          # adds them to my-api
+dkit install drizzle --project ../web    # a different project
+dkit install prisma --pm pnpm            # override the package manager
+dkit doctor                              # inside a project: also lists which libraries it has
+```
+
+- **Which project:** the folder you're in, or `--project <folder>`. It must have a `package.json`; dkit never edits a parent folder's project by accident.
+- **Which package manager:** `packageManager` in package.json, else the lockfile (`pnpm-lock.yaml`, `bun.lock`, `yarn.lock`, `package-lock.json`), else npm. If that package manager isn't installed, dkit installs it first (pnpm and Yarn need Node.js; Bun doesn't).
+- Only missing libraries are added, regular and dev dependencies in one command each, and the result is checked against package.json.
+- Machine tools and libraries can be mixed: `dkit install gh hono`.
+
+| Group | Libraries (id) |
+|---|---|
+| Frameworks | Hono (`hono`) |
+| Database libraries | Kysely (`kysely`), Drizzle ORM (`drizzle`: drizzle-orm + dev drizzle-kit), Prisma (`prisma`: @prisma/client + dev prisma), dbmate (`dbmate`, dev) |
+| Auth | Better Auth (`better-auth`) |
 
 ## Migrate to a new PC or OS
 
@@ -141,17 +164,18 @@ npm test                  # tests run on a fake machine; nothing is really insta
 src/
   index.ts              CLI entry
   commands/             doctor, install, migrate
-  core/catalog.ts       the 18 tools and how to install each on each OS
+  core/catalog.ts       every tool and library: how to find and install it on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
   core/prereqs.ts       OS prerequisites (Windows features, WSL, ...): check and set up
   core/maturity.ts      support level (L1-L5) per tool, worked out from its catalog entry
+  core/project.ts       projects: package.json, package manager, adding libraries
   adapters/methods.ts   winget, brew, apt, npm, scripts
   migrate/              backup format, export, restore
   utils/                safe command runner, prompts, logger
 ```
 
-To add a tool, add one entry to `src/core/catalog.ts` (id, name, kind, description, detect, install). `dkit info <id>` then shows what you've given it.
+To add a tool, add one entry to `src/core/catalog.ts` (id, name, kind, description, detect, install). For a project library use `kind: "project"` and `packages: { deps, dev }` instead of detect/install. `dkit info <id>` then shows what you've given it.
 
 ## License
 
