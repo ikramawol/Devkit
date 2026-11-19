@@ -47,6 +47,26 @@ dkit catalog --check             # confirm every winget package id on this PC
 
 Dependencies are added for you: picking Codex, Prettier or ESLint adds Node.js; Claude Code on Windows adds Git.
 
+### System prerequisites
+
+Some tools need the OS set up first. `dkit doctor` lists what's missing under each tool, and `dkit install` shows a checklist, sets up each missing item, ticks it off, and only then installs the tool:
+
+```
+Docker needs these set up first:
+  ✓ Windows build 19045 or newer
+  ✓ CPU virtualization turned on
+  ○ Virtual Machine Platform       will turn on (admin prompt, restart)
+  ○ Windows Subsystem for Linux    will turn on (admin prompt, restart)
+  ○ WSL 2                          will install (admin prompt, restart)
+```
+
+- `○` dkit sets it up (each one shows a Windows admin prompt)
+- `✗` you have to do it yourself (turn on virtualization in BIOS, update Windows); dkit won't install the tool until it's fixed
+- A tool that's installed but missing what it needs (e.g. Docker without WSL) can be picked again; dkit sets up only the missing pieces
+- If anything needs a restart, the summary says so
+
+Prerequisites are declared per tool with `prereqs` in `src/core/catalog.ts` (types: `windows-build`, `virtualization`, `windows-feature`, `wsl` in `src/core/prereqs.ts`).
+
 | Group | Tools (id) |
 |---|---|
 | Essentials | Git (`git`), Git Bash (`git-bash`), OpenSSH (`openssh`), GitHub CLI (`gh`) |
@@ -108,6 +128,7 @@ src/
   core/catalog.ts       the 18 tools and how to install each on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
+  core/prereqs.ts       OS prerequisites (Windows features, WSL, ...): check and set up
   adapters/methods.ts   winget, brew, apt, npm, scripts
   migrate/              backup format, export, restore
   utils/                safe command runner, prompts, logger

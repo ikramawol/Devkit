@@ -1,4 +1,5 @@
 import type { OS } from "./platform.js";
+import type { Prereq } from "./prereqs.js";
 
 /** How to install one tool on one OS. */
 export type Method =
@@ -34,6 +35,8 @@ export interface CatalogItem {
   install: Partial<Record<OS, Method>>;
   /** Other catalog ids that must be installed first. */
   requires?: Partial<Record<OS, string[]>> & { all?: string[] };
+  /** OS setup that must be in place first (Windows features, WSL, ...). Checked by `doctor`, set up by `install`. */
+  prereqs?: Partial<Record<OS, Prereq[]>>;
   /** Shown after install: logins, restarts, passwords. */
   notes?: string[];
 }
@@ -229,7 +232,16 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "brew", cask: "docker-desktop" },
       linux: { type: "apt", packages: ["docker.io"] },
     },
-    notes: ["Docker Desktop on Windows needs WSL 2 and usually a restart. Open it once to finish setup."],
+    prereqs: {
+      windows: [
+        { type: "windows-build", min: 19045 },
+        { type: "virtualization" },
+        { type: "windows-feature", name: "VirtualMachinePlatform", label: "Virtual Machine Platform" },
+        { type: "windows-feature", name: "Microsoft-Windows-Subsystem-Linux", label: "Windows Subsystem for Linux" },
+        { type: "wsl" },
+      ],
+    },
+    notes: ["Open Docker Desktop once to finish setup. If `docker` says permission denied, sign out and back in."],
   },
   {
     id: "postman",

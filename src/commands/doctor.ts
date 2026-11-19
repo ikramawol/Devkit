@@ -2,6 +2,8 @@ import type { Command } from "commander";
 import { CATALOG, CATEGORIES } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
 import { describeMethod } from "../adapters/methods.js";
+import { prereqLine } from "../core/engine.js";
+import { checkPrereqs, type PrereqCheck } from "../core/prereqs.js";
 import { c } from "../utils/logger.js";
 import { makeContext } from "./context.js";
 
@@ -13,26 +15,44 @@ export function registerDoctor(program: Command) {
     .option("--json", "output JSON")
     .action((opts: { json?: boolean }) => {
       const ctx = makeContext({});
-      const statuses = CATALOG.map((i) => ({ item: i, status: detectItem(i, ctx) }));
+      const cache = new Map<string, PrereqCheck>();
+      const statuses = CATALOG.map((i) => ({
+        item: i,
+        status: detectItem(i, ctx),
+        prereqs: checkPrereqs(i, ctx.platform.os, ctx.runner, cache),
+      }));
 
       if (opts.json) {
-        console.log(JSON.stringify({ platform: ctx.platform, tools: statuses.map((s) => s.status) }, null, 2));
+        const tools = statuses.map((s) => ({
+          ...s.status,
+          prereqs: s.prereqs.map(({ key, label, ok, fixable, hint }) => ({ key, label, ok, fixable, hint: ok ? undefined : hint })),
+        }));
+        console.log(JSON.stringify({ platform: ctx.platform, tools }, null, 2));
         return;
       }
 
       console.log(c.bold(`dkit doctor  ${c.dim(`${ctx.platform.os} ${ctx.platform.arch}`)}`));
       for (const cat of CATEGORIES) {
         console.log(`\n${c.bold(cat)}`);
-        for (const { item, status } of statuses.filter((s) => s.item.category === cat)) {
-          const mark = status.installed ? c.green("✓") : c.red("✗");
-          const detail = status.installed ? status.version ?? c.dim("installed") : c.dim("not installed");
+        for (const { item, status, prereqs } of statuses.filter((s) => s.item.category === cat)) {
+          const missingPrereqs = prereqs.filter((p) => !p.ok);
+          const mark = !status.installed ? c.red("✗") : missingPrereqs.length ? c.yellow("!") : c.green("✓");
+          let detail = status.installed ? status.version ?? c.dim("installed") : c.dim("not installed");
+          if (missingPrereqs.length) detail += c.yellow(status.installed ? "  but missing what it needs to run:" : "  needs:");
           console.log(`  ${mark} ${item.name.padEnd(20)} ${c.dim(item.id.padEnd(12))} ${detail}`);
+          for (const p of missingPrereqs) console.log(`      ${prereqLine(p)}`);
         }
       }
-      const missing = statuses.filter((s) => !s.status.installed).map((s) => s.item.id);
+
+      const todo = statuses.filter((s) => !s.status.installed || s.prereqs.some((p) => !p.ok)).map((s) => s.item.id);
+      const manual = statuses.some((s) => s.prereqs.some((p) => !p.ok && !p.fixable));
       console.log();
-      if (!missing.length) console.log(c.green("Everything is installed."));
-      else console.log(`Install missing tools with: ${c.cyan(`dkit install ${missing.join(" ")}`)}  ${c.dim("or just `dkit install` to pick")}`);
+      if (!todo.length) console.log(c.green("Everything is installed and set up."));
+      else {
+        console.log(`Fix with: ${c.cyan(`dkit install ${todo.join(" ")}`)}  ${c.dim("or just `dkit install` to pick")}`);
+        console.log(c.dim("  ○ = dkit sets this up for you during install"));
+        if (manual) console.log(c.dim("  ✗ = you need to do this yourself first"));
+      }
     });
 
   program

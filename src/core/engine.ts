@@ -4,6 +4,7 @@ import { c } from "../utils/logger.js";
 import { addToUserPath, describeMethod, runMethod } from "../adapters/methods.js";
 import { CATALOG, getItem, requiresFor, type CatalogItem } from "./catalog.js";
 import { detectItem, type DetectDeps, type ToolStatus } from "./detect.js";
+import { checkPrereqs, describeFix, fixPrereq, type FixResult, type PrereqCheck } from "./prereqs.js";
 
 export interface EngineContext extends DetectDeps {
   log: Logger;
@@ -20,23 +21,36 @@ export interface InstallPlan {
   /** Not automatable on this OS: id → download URL. */
   manual: { item: CatalogItem; url: string }[];
   unknown: string[];
+  /** OS prerequisites per tool id (only tools that have any on this OS). */
+  prereqs: Record<string, PrereqCheck[]>;
+  /** Already installed, but missing prerequisites that dkit will set up. */
+  repair: CatalogItem[];
+  /** Need a step only the user can do (BIOS, Windows update) before dkit can continue. */
+  blocked: CatalogItem[];
 }
 
-export type Outcome = "installed" | "needs-new-terminal" | "unverified" | "failed" | "skipped";
+export type Outcome = "installed" | "set-up" | "needs-new-terminal" | "unverified" | "failed" | "skipped";
 
 export interface InstallReport {
   results: { id: string; name: string; outcome: Outcome; message?: string }[];
   notes: string[];
+  /** Prerequisites that were set up but need Windows restarted to finish. */
+  restartFor: string[];
 }
+
+const pendingPrereqs = (plan: InstallPlan, id: string) => (plan.prereqs[id] ?? []).filter((p) => !p.ok);
 
 export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
   const os = ctx.platform.os;
-  const plan: InstallPlan = { toInstall: [], addedDeps: [], alreadyInstalled: [], manual: [], unknown: [] };
+  const plan: InstallPlan = {
+    toInstall: [], addedDeps: [], alreadyInstalled: [], manual: [], unknown: [], prereqs: {}, repair: [], blocked: [],
+  };
   const statusCache = new Map<string, ToolStatus>();
   const status = (item: CatalogItem) => {
     if (!statusCache.has(item.id)) statusCache.set(item.id, detectItem(item, ctx));
     return statusCache.get(item.id)!;
   };
+  const prereqCache = new Map<string, PrereqCheck>();
   const picked = new Set(ids);
   const visited = new Set<string>();
 
@@ -46,8 +60,19 @@ export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
     const item = getItem(id);
     if (!item) return void plan.unknown.push(id);
 
+    const checks = checkPrereqs(item, os, ctx.runner, prereqCache);
+    if (checks.length) plan.prereqs[item.id] = checks;
+    const blocked = checks.some((p) => !p.ok && !p.fixable);
+    const needsSetup = checks.some((p) => !p.ok);
+
     const s = status(item);
-    if (s.installed) return void plan.alreadyInstalled.push(s);
+    if (s.installed) {
+      plan.alreadyInstalled.push(s);
+      if (blocked) plan.blocked.push(item);
+      else if (needsSetup) plan.repair.push(item);
+      return;
+    }
+    if (blocked) return void plan.blocked.push(item);
 
     for (const dep of requiresFor(item, os)) {
       visit(dep);
@@ -67,10 +92,29 @@ export function buildPlan(ids: string[], ctx: DetectDeps): InstallPlan {
   return plan;
 }
 
+/** ✓ done, ○ dkit will set it up, ✗ the user must do it. */
+export function prereqLine(p: PrereqCheck): string {
+  if (p.ok) return `${c.green("✓")} ${p.label}`;
+  if (p.fixable) return `${c.yellow("○")} ${p.label.padEnd(30)} ${c.dim(describeFix(p.prereq))}`;
+  return `${c.red("✗")} ${p.label.padEnd(30)} ${c.dim(p.hint ?? "")}`;
+}
+
 export function printPlan(plan: InstallPlan, ctx: EngineContext) {
   const { log } = ctx;
   const os = ctx.platform.os;
   for (const s of plan.alreadyInstalled) log.ok(`${s.name} ${c.dim(s.version ?? "already installed")}`);
+
+  for (const item of plan.blocked) {
+    const installed = plan.alreadyInstalled.some((s) => s.id === item.id);
+    log.info(c.bold(`\n${item.name} ${installed ? "won't run" : "can't be installed"} until you fix the ✗ items:`));
+    for (const p of plan.prereqs[item.id] ?? []) log.info(`  ${prereqLine(p)}`);
+  }
+  for (const item of [...plan.repair, ...plan.toInstall]) {
+    if (!pendingPrereqs(plan, item.id).length) continue;
+    log.info(c.bold(`\n${item.name} needs these set up first:`));
+    for (const p of plan.prereqs[item.id]) log.info(`  ${prereqLine(p)}`);
+  }
+
   if (plan.toInstall.length) {
     log.info(c.bold("\nWill install:"));
     for (const item of plan.toInstall) {
@@ -87,13 +131,50 @@ export function printPlan(plan: InstallPlan, ctx: EngineContext) {
 
 export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promise<InstallReport> {
   const { runner, platform, log } = ctx;
-  const report: InstallReport = { results: [], notes: [] };
-  const failed = new Set<string>();
+  const report: InstallReport = { results: [], notes: [], restartFor: [] };
+  const failed = new Set<string>(plan.blocked.map((i) => i.id));
+  const fixed = new Map<string, FixResult>(); // shared between tools in this run
+
+  /** Work through a tool's missing prerequisites, ticking each off. Returns an error message, or null when all are done. */
+  const setUp = (item: CatalogItem): string | null => {
+    const pending = pendingPrereqs(plan, item.id);
+    if (!pending.length) return null;
+    log.step(`Setting up what ${item.name} needs first…`);
+    for (const p of pending) {
+      let res = fixed.get(p.key);
+      if (!res) {
+        log.info(`  ${c.yellow("○")} ${p.label}… ${c.dim("(approve the admin prompt)")}`);
+        res = fixPrereq(p.prereq, runner);
+        fixed.set(p.key, res);
+        if (res.ok && res.restart) report.restartFor.push(p.label);
+      }
+      if (!res.ok) {
+        log.error(`${p.label}: ${res.message ?? "failed"}`);
+        return `couldn't set up ${p.label}`;
+      }
+      log.info(`  ${c.green("✓")} ${p.label}${res.restart ? c.dim("  (restart Windows to finish)") : ""}`);
+    }
+    log.ok(`Everything ${item.name} needs is set up`);
+    return null;
+  };
+
+  // Installed tools that were only missing prerequisites.
+  for (const item of plan.repair) {
+    const err = setUp(item);
+    report.results.push({ id: item.id, name: item.name, outcome: err ? "failed" : "set-up", message: err ?? undefined });
+  }
 
   for (const item of plan.toInstall) {
     const blockedBy = requiresFor(item, platform.os).find((d) => failed.has(d));
     if (blockedBy) {
       report.results.push({ id: item.id, name: item.name, outcome: "skipped", message: `${blockedBy} failed` });
+      failed.add(item.id);
+      continue;
+    }
+
+    const prereqError = setUp(item);
+    if (prereqError) {
+      report.results.push({ id: item.id, name: item.name, outcome: "failed", message: prereqError });
       failed.add(item.id);
       continue;
     }
@@ -132,11 +213,16 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
   log.info(c.bold("\nSummary"));
   const line = (label: string, names: string[]) => names.length && log.info(`  ${label} ${names.join(", ")}`);
   line(c.green("Installed:"), by("installed"));
+  line(c.green("Prerequisites set up:"), by("set-up"));
   line(c.yellow("Open a new terminal for:"), by("needs-new-terminal"));
   line(c.yellow("Check after restart:"), by("unverified"));
   line(c.red("Failed:"), report.results.filter((r) => r.outcome === "failed").map((r) => `${r.name} (${r.message})`));
   line(c.red("Skipped:"), report.results.filter((r) => r.outcome === "skipped").map((r) => `${r.name} (${r.message})`));
+  line(c.red("Needs you first:"), plan.blocked.map((i) => i.name));
   line("Install yourself:", plan.manual.map((m) => m.item.name));
+  if (report.restartFor.length) {
+    log.warn(c.bold(`Restart Windows to finish setting up: ${report.restartFor.join(", ")}`));
+  }
   if (report.notes.length) {
     log.info(c.bold("\nNext steps"));
     for (const n of report.notes) log.info(`  • ${n}`);
@@ -147,15 +233,18 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
 export async function installTools(ids: string[], ctx: EngineContext): Promise<InstallReport | null> {
   const plan = buildPlan(ids, ctx);
   printPlan(plan, ctx);
-  if (!plan.toInstall.length) {
+  if (!plan.toInstall.length && !plan.repair.length) {
     ctx.log.info("\nNothing to install.");
-    return { results: [], notes: [] };
+    return { results: [], notes: [], restartFor: [] };
   }
   if (ctx.dryRun) {
     ctx.log.info(c.dim("\n[dry-run] nothing was changed"));
     return null;
   }
-  if (!(await ctx.confirm(`\nInstall ${plan.toInstall.length} tool(s)?`))) {
+  const question = plan.toInstall.length
+    ? `\nInstall ${plan.toInstall.length} tool(s)?`
+    : `\nSet up what ${plan.repair.map((i) => i.name).join(", ")} needs?`;
+  if (!(await ctx.confirm(question))) {
     ctx.log.warn("Cancelled. Nothing was changed.");
     return null;
   }

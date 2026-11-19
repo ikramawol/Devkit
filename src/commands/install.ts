@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { CATALOG, CATEGORIES } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
 import { installTools } from "../core/engine.js";
+import { checkPrereqs, type PrereqCheck } from "../core/prereqs.js";
 import { c } from "../utils/logger.js";
 import type { Choice } from "../utils/prompt.js";
 import { makeContext, type CommonOpts } from "./context.js";
@@ -27,15 +28,18 @@ export function registerInstall(program: Command) {
         }
         ctx.log.step("Checking what's already installed…");
         const choices: Choice[] = [];
+        const cache = new Map<string, PrereqCheck>();
         for (const cat of CATEGORIES) {
           for (const item of CATALOG.filter((i) => i.category === cat)) {
             const s = detectItem(item, ctx);
             const method = item.install[ctx.platform.os];
+            // An installed tool that's missing what it needs to run can still be picked, to set that up.
+            const needsSetup = s.installed && checkPrereqs(item, ctx.platform.os, ctx.runner, cache).some((p) => !p.ok);
             choices.push({
               value: item.id,
-              name: `${c.dim(cat.padEnd(13))} ${item.name}`,
+              name: `${c.dim(cat.padEnd(13))} ${item.name}${needsSetup ? c.yellow("  (installed, needs setup)") : ""}`,
               checked: false, // nothing is installed unless you pick it
-              disabled: s.installed ? `installed ${s.version ?? ""}`.trim() : method?.type === "manual" ? "manual download" : false,
+              disabled: s.installed && !needsSetup ? `installed ${s.version ?? ""}`.trim() : method?.type === "manual" ? "manual download" : false,
             });
           }
         }
