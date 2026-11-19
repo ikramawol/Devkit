@@ -232,7 +232,10 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
         report.notes.push(`Your ${s.kind} profile (${s.file.path}) doesn't run on ${platform.os}. It's in the backup file if you want to translate it.`);
         continue;
       }
-      write(path.join(platform.home, ...s.file.path.split("/")), s.file, `${s.kind} profile`);
+      const target = path.join(platform.home, ...s.file.path.split("/"));
+      write(target, s.file, `${s.kind} profile`);
+      if (unbundle(s.file).toString("utf8").includes(REDACTED))
+        report.notes.push(`Your ${s.kind} profile (${target}) had secret values removed. Search it for ${REDACTED} and fill them in, or those variables will be wrong.`);
     }
   }
 

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from "node:path";
 import { createBackup } from "../src/migrate/export.js";
 import { restoreBackup, validateBackup, SECTIONS } from "../src/migrate/restore.js";
-import { REDACTED, foreignPaths, redactJson, redactJsonc } from "../src/migrate/bundle.js";
+import { REDACTED, foreignPaths, redactJson, redactJsonc, redactShell } from "../src/migrate/bundle.js";
 import { editorUserDir } from "../src/core/platform.js";
 import { silentLogger } from "../src/utils/logger.js";
 import { engineCtx, fakeRunner, ok, tempPlatform } from "./helpers.js";
@@ -136,4 +136,46 @@ test("redaction helpers", () => {
   assert.match(redactJsonc(`"openai.apiKey": "sk-abcdef"`).text, /REDACTED/);
   assert.deepEqual(foreignPaths("path C:\\Users\\me\\x", "linux"), ["C:\\Users\\me\\x"]);
   assert.deepEqual(foreignPaths("path C:\\Users\\me\\x", "windows"), []);
+});
+
+test("shell profiles: secret values are removed, everything else is kept", () => {
+  const ps = [
+    `$env:OPENAI_API_KEY = "sk-proj-abcdefghijklmnop1234"`,
+    `$env:GITHUB_TOKEN='ghp_abcdefghijklmnopqrstuvwxyz12'`,
+    `[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-zzzzzzzzzzzzzzzzzzzz", "User")`,
+    `$env:EDITOR = "code"`,                         // not secret
+    `$token = Get-Secret -Name gh`,                 // a command, not a literal
+    `$env:API_KEY = $env:OTHER_KEY`,                // a reference, not a literal
+    `Set-Alias g git`,
+    `function gh-api { curl -H "Authorization: Bearer ghp_zyxwvutsrqponmlkjihgfedcba98" $args }`,
+  ].join("\n");
+  const { text, redacted } = redactShell(ps);
+  for (const secret of ["sk-proj-", "ghp_", "sk-ant-"]) assert.ok(!text.includes(secret), secret);
+  assert.ok(text.includes(`$env:OPENAI_API_KEY = "${REDACTED}"`), "keeps the line so it's easy to fill in");
+  assert.ok(text.includes(`$env:GITHUB_TOKEN='${REDACTED}'`));
+  assert.ok(text.includes(`SetEnvironmentVariable("ANTHROPIC_API_KEY", "${REDACTED}", "User")`));
+  for (const kept of [`$env:EDITOR = "code"`, "$token = Get-Secret -Name gh", "$env:API_KEY = $env:OTHER_KEY", "Set-Alias g git"])
+    assert.ok(text.includes(kept), kept);
+  assert.deepEqual(redacted.sort(), ["ANTHROPIC_API_KEY", "GITHUB_TOKEN", "OPENAI_API_KEY", "token"]);
+
+  const sh = `export AWS_SECRET_ACCESS_KEY=abc123def456\nDB_PASSWORD="hunter22"\nexport PATH="$HOME/bin:$PATH"\nalias ll='ls -la'\n`;
+  const b = redactShell(sh);
+  assert.ok(!b.text.includes("abc123def456") && !b.text.includes("hunter22"));
+  assert.ok(b.text.includes(`export PATH="$HOME/bin:$PATH"`) && b.text.includes("alias ll='ls -la'"));
+  assert.deepEqual(redactShell(b.text).redacted, [], "running it twice changes nothing");
+});
+
+test("export redacts the PowerShell profile and restore says what to fill in", async () => {
+  const { platform, runner } = oldMachine();
+  const profile = path.join(platform.home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1");
+  put(profile, `$env:OPENAI_API_KEY = "sk-proj-abcdefghijklmnop1234"\nSet-Alias g git\n`);
+
+  const backup = validateBackup(JSON.parse(JSON.stringify(createBackup({ runner, platform, log: silentLogger }))));
+  assert.ok(!JSON.stringify(backup).includes("sk-proj-") && !Buffer.from(backup.shell[0].file.base64, "base64").toString().includes("sk-proj-"));
+  assert.ok(backup.notes.some((n) => n.includes("OPENAI_API_KEY")));
+
+  const target = tempPlatform("windows");
+  const ctx = { ...engineCtx(fakeRunner({ installed: new Set() }).runner, target), select: async () => [], sections: ["shell" as const] };
+  const report = await restoreBackup(backup, ctx);
+  assert.ok(report.notes.some((n) => n.includes("fill them in")));
 });

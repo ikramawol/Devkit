@@ -9,7 +9,7 @@ import { CATALOG } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
 import { EDITORS, EDITOR_DIRS, EDITOR_FILES } from "./editors.js";
 import {
-  type Backup, type BundledFile, bundleFile, collectDir, redactJson, redactJsonc,
+  type Backup, type BundledFile, bundleFile, collectDir, redactJson, redactJsonc, redactShell,
 } from "./bundle.js";
 
 export interface ExportDeps {
@@ -172,7 +172,12 @@ export function createBackup(deps: ExportDeps): Backup {
       : [["bash", path.join(platform.home, ".bashrc")], ["zsh", path.join(platform.home, ".zshrc")]];
   for (const [kind, p] of shellCandidates) {
     const buf = read(p);
-    if (buf) shell.push({ kind, file: bundleFile(path.relative(platform.home, p), buf) });
+    if (!buf) continue;
+    const rel = path.relative(platform.home, p);
+    const { text, redacted } = redactShell(buf.toString("utf8"));
+    if (redacted.length) notes.push(`${kind} profile (${rel}): removed secret values (${redacted.join(", ")}). Fill them in after restore.`);
+    // Nothing secret: keep the exact bytes so an unchanged file restores as "unchanged".
+    shell.push({ kind, file: bundleFile(rel, redacted.length ? Buffer.from(text, "utf8") : buf) });
   }
 
   return {

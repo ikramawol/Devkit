@@ -114,6 +114,54 @@ export function redactJsonc(text: string): { text: string; redacted: string[] } 
   return { text: out, redacted };
 }
 
+/** Well-known token formats, caught wherever they appear (OpenAI/Anthropic, GitHub, AWS, Slack, Google). */
+const TOKEN_VALUE = /\b(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{30,})/g;
+
+/** A literal value, not a reference to something else ($other, $(command), `command`). */
+const isLiteral = (v: string) => v.length > 0 && v !== REDACTED && !/^[$(`]/.test(v);
+
+/**
+ * Shell profiles (PowerShell, bash, zsh) often set API keys directly:
+ *   $env:OPENAI_API_KEY = "sk-..."      export GITHUB_TOKEN=ghp_...
+ *   [Environment]::SetEnvironmentVariable("API_KEY", "...", "User")
+ * Replace those values (keeping the line, so it's easy to fill back in) and any well-known token format.
+ */
+export function redactShell(text: string): { text: string; redacted: string[] } {
+  const redacted: string[] = [];
+  const mask = (name: string, value: string, quote: string) => {
+    if (!SECRET_KEY.test(name) || !isLiteral(value)) return null;
+    redacted.push(name);
+    return `${quote}${REDACTED}${quote}`;
+  };
+
+  // NAME = "value" | 'value' | value   after $env:, $, export, or at the start of a line.
+  let out = text.replace(
+    /(\$env:|\$|\bexport\s+|^[ \t]*)([A-Za-z_]\w*)([ \t]*=(?!=)[ \t]*)(?:"([^"\n]*)"|'([^'\n]*)'|([^\s;#"']+))/gm,
+    (m, pre: string, name: string, eq: string, dq?: string, sq?: string, bare?: string) => {
+      // In PowerShell an unquoted value is a command (`$token = Get-Secret`), not a literal.
+      if (bare !== undefined && pre.startsWith("$")) return m;
+      const value = dq ?? sq ?? bare ?? "";
+      const quote = dq !== undefined ? '"' : sq !== undefined ? "'" : "";
+      const masked = mask(name, value, quote);
+      return masked ? `${pre}${name}${eq}${masked}` : m;
+    },
+  );
+  // [Environment]::SetEnvironmentVariable("NAME", "value", ...)
+  out = out.replace(
+    /(SetEnvironmentVariable\(\s*)(["'])(\w+)\2(\s*,\s*)(["'])([^"'\n]*)\5/g,
+    (m, pre: string, q1: string, name: string, sep: string, q2: string, value: string) => {
+      const masked = mask(name, value, q2);
+      return masked ? `${pre}${q1}${name}${q1}${sep}${masked}` : m;
+    },
+  );
+  // Anything that still looks like a real token (e.g. inside a curl header or an alias).
+  out = out.replace(TOKEN_VALUE, () => {
+    redacted.push("token");
+    return REDACTED;
+  });
+  return { text: out, redacted: [...new Set(redacted)] };
+}
+
 // ── Safe writes ───────────────────────────────────────────────
 
 export type WriteOutcome = "created" | "replaced" | "unchanged";
