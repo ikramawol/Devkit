@@ -3,7 +3,7 @@ import type { Confirm } from "../utils/prompt.js";
 import { c } from "../utils/logger.js";
 import { addToUserPath, describeMethod, runMethod } from "../adapters/methods.js";
 import { CATALOG, getItem, requiresFor, type CatalogItem } from "./catalog.js";
-import { detectItem, type DetectDeps, type ToolStatus } from "./detect.js";
+import { clearWingetCache, detectItem, type DetectDeps, type ToolStatus } from "./detect.js";
 import { checkPrereqs, describeFix, fixPrereq, type FixResult, type PrereqCheck } from "./prereqs.js";
 
 export interface EngineContext extends DetectDeps {
@@ -190,6 +190,7 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
 
     // New installs change PATH; reload it so this run (and later npm installs) can see them.
     runner.refreshPath();
+    clearWingetCache(runner);
     const after = detectItem(item, ctx);
     let outcome: Outcome = after.installed ? "installed" : "unverified";
 

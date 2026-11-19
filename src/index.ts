@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerDoctor } from "./commands/doctor.js";
+import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
 import { registerMigrate } from "./commands/migrate.js";
 
@@ -10,6 +11,7 @@ const program = new Command()
   .version("0.2.0");
 
 registerDoctor(program);
+registerInfo(program);
 registerInstall(program);
 registerMigrate(program);
 

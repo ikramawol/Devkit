@@ -42,6 +42,8 @@ dkit install                     # checklist: pick with space, confirm with ente
 dkit install git node claude     # just these
 dkit install --all --dry-run     # show the plan for everything, change nothing
 dkit claude                      # shortcut for `dkit install claude`
+dkit info docker                 # one tool: status, support level, what it needs
+dkit catalog                     # every tool, its installer and support level
 dkit catalog --check             # confirm every winget package id on this PC
 ```
 
@@ -66,6 +68,20 @@ Docker needs these set up first:
 - If anything needs a restart, the summary says so
 
 Prerequisites are declared per tool with `prereqs` in `src/core/catalog.ts` (types: `windows-build`, `virtualization`, `windows-feature`, `wsl` in `src/core/prereqs.ts`).
+
+### Support levels
+
+Not every tool is supported equally, and dkit says so. `dkit catalog` and `dkit info <id>` show a level worked out from what dkit can actually do for that tool on your OS:
+
+| Level | Means |
+|---|---|
+| L1 Discover | tells whether it's installed |
+| L2 Install | installs it with your OS's installer |
+| L3 Configure | applies settings for you |
+| L4 Snapshot & restore | `dkit migrate` saves and restores its settings |
+| L5 Maintain | updates, uninstalls and diagnoses it |
+
+Today every tool is at L2 on Windows. `+S` marks tools whose settings already move with `dkit migrate` (VS Code, Antigravity, Git, Claude Code, Node's global packages, SSH config).
 
 | Group | Tools (id) |
 |---|---|
@@ -108,7 +124,7 @@ What's carried over:
 
 Safety rules:
 
-- Secret values (tokens, API keys, passwords) are replaced with `<REDACTED>` on export
+- Secret values (tokens, API keys, passwords) are replaced with `<REDACTED>` on export, including keys set in your shell profile (`$env:OPENAI_API_KEY = "..."`, `export GITHUB_TOKEN=...`); restore tells you which to fill back in
 - Never exported: SSH private keys, login sessions, Claude credentials, chat history, database data
 - Every file that would be overwritten is copied to `*.dkit-backup-<time>` first
 - Every file has a checksum; a damaged backup is refused
@@ -129,12 +145,13 @@ src/
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
   core/prereqs.ts       OS prerequisites (Windows features, WSL, ...): check and set up
+  core/maturity.ts      support level (L1-L5) per tool, worked out from its catalog entry
   adapters/methods.ts   winget, brew, apt, npm, scripts
   migrate/              backup format, export, restore
   utils/                safe command runner, prompts, logger
 ```
 
-To add a tool, add one entry to `src/core/catalog.ts`.
+To add a tool, add one entry to `src/core/catalog.ts` (id, name, kind, description, detect, install). `dkit info <id>` then shows what you've given it.
 
 ## License
 

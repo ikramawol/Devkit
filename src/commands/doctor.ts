@@ -3,6 +3,7 @@ import { CATALOG, CATEGORIES } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
 import { describeMethod } from "../adapters/methods.js";
 import { prereqLine } from "../core/engine.js";
+import { LEVELS, maturityOf } from "../core/maturity.js";
 import { checkPrereqs, type PrereqCheck } from "../core/prereqs.js";
 import { c } from "../utils/logger.js";
 import { makeContext } from "./context.js";
@@ -57,11 +58,12 @@ export function registerDoctor(program: Command) {
 
   program
     .command("catalog")
-    .description("Show how each tool is installed on this OS")
+    .description("Show every tool, how it's installed on this OS, and how far dkit supports it")
     .option("--check", "Windows: confirm every winget package id exists")
     .action((opts: { check?: boolean }) => {
       const ctx = makeContext({});
       const os = ctx.platform.os;
+      console.log(c.dim(`${"Tool".padEnd(20)} ${"id".padEnd(12)} ${"Support".padEnd(8)} How it's installed on ${os}`));
       for (const item of CATALOG) {
         const m = item.install[os];
         let mark = "";
@@ -69,7 +71,11 @@ export function registerDoctor(program: Command) {
           const r = ctx.runner.run("winget", ["show", "--id", m.id, "--exact", "--accept-source-agreements", "--disable-interactivity"]);
           mark = r.ok ? c.green(" ✓ found") : c.red(" ✗ not found in winget");
         }
-        console.log(`${item.name.padEnd(20)} ${c.dim(m ? describeMethod(m) : "not supported on this OS")}${mark}`);
+        const { level, has } = maturityOf(item, os);
+        const support = `L${level}${has.snapshot && level < 4 ? "+S" : ""}`;
+        console.log(`${item.name.padEnd(20)} ${c.dim(item.id.padEnd(12))} ${support.padEnd(8)} ${c.dim(m ? describeMethod(m) : "not supported on this OS")}${mark}`);
       }
+      console.log(c.dim(`\nSupport: ${LEVELS.map((l) => `L${l.level} ${l.label}`).join(" · ")}  (+S = settings move with \`dkit migrate\`)`));
+      console.log(c.dim("Details for one tool: dkit info <id>"));
     });
 }

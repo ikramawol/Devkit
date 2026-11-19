@@ -21,15 +21,29 @@ export interface Detect {
   /** Command on PATH; `versionArgs` must succeed for the tool to count as installed. */
   command?: string;
   versionArgs?: string[];
+  /** Only trust `command` on these OSes (default: all). On Windows, `bash` is WSL's launcher, not Git Bash. */
+  commandOn?: OS[];
   /** Fallback for GUI apps with no CLI: well-known install paths (env vars allowed). */
   paths?: Partial<Record<OS, string[]>>;
 }
 
 export type Category = "Essentials" | "Languages" | "Editors & AI" | "Databases" | "Tools";
 
+/**
+ * Where a resource lives.
+ * - machine: installed once on the computer with the OS's installer (Git, Docker, VS Code).
+ * - project: a dependency inside one project, added with its package manager (Hono, Kysely). Coming next.
+ */
+export type ResourceKind = "machine" | "project";
+
 export interface CatalogItem {
   id: string;
   name: string;
+  kind: ResourceKind;
+  /** One line, shown by `dkit info`. */
+  description: string;
+  /** What `dkit migrate` saves and restores for it. Kept honest by a test against src/migrate. */
+  snapshot?: string[];
   category: Category;
   detect: Detect;
   install: Partial<Record<OS, Method>>;
@@ -48,6 +62,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "git",
     name: "Git",
+    kind: "machine",
+    description: "Version control: track changes to your code and work with GitHub and other hosts.",
+    snapshot: ["global config", "global gitignore"],
     category: "Essentials",
     detect: { command: "git", versionArgs: ["--version"] },
     install: {
@@ -59,8 +76,15 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "git-bash",
     name: "Git Bash",
+    kind: "machine",
+    description: "A Bash shell for Windows that comes with Git. Claude Code uses it on Windows.",
     category: "Essentials",
-    detect: { paths: { windows: ["%ProgramFiles%\\Git\\bin\\bash.exe", "%LOCALAPPDATA%\\Programs\\Git\\bin\\bash.exe"] }, command: "bash", versionArgs: ["--version"] },
+    detect: {
+      paths: { windows: ["%ProgramFiles%\\Git\\bin\\bash.exe", "%LOCALAPPDATA%\\Programs\\Git\\bin\\bash.exe"] },
+      command: "bash",
+      versionArgs: ["--version"],
+      commandOn: ["macos", "linux"], // on Windows `bash` starts WSL (slow, and it's not Git Bash)
+    },
     install: {
       windows: { type: "bundled", with: "git" },
       macos: { type: "builtin" },
@@ -71,6 +95,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "openssh",
     name: "OpenSSH",
+    kind: "machine",
+    description: "SSH client for connecting to servers and signing in to GitHub over SSH.",
+    snapshot: ["SSH config (never keys)"],
     category: "Essentials",
     detect: { command: "ssh", versionArgs: ["-V"] },
     install: {
@@ -83,6 +110,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "gh",
     name: "GitHub CLI",
+    kind: "machine",
+    description: "GitHub from the terminal: pull requests, issues, releases, and sign-in for Git.",
     category: "Essentials",
     detect: { command: "gh", versionArgs: ["--version"] },
     install: {
@@ -97,6 +126,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "node",
     name: "Node.js + npm",
+    kind: "machine",
+    description: "JavaScript runtime with npm, the package manager most JS/TS tools install with.",
+    snapshot: ["global npm packages"],
     category: "Languages",
     detect: { command: "node", versionArgs: ["--version"] },
     install: {
@@ -108,6 +140,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "python",
     name: "Python",
+    kind: "machine",
+    description: "Python 3 with pip, for scripts, data work and Python web frameworks.",
     category: "Languages",
     // On Windows, `python` can be a Microsoft Store stub that fails --version; that counts as missing.
     detect: { command: "python", versionArgs: ["--version"] },
@@ -122,6 +156,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "vscode",
     name: "Visual Studio Code",
+    kind: "machine",
+    description: "Microsoft's code editor, with extensions for almost every language.",
+    snapshot: ["extensions", "settings", "keybindings", "tasks", "snippets"],
     category: "Editors & AI",
     detect: {
       command: "code",
@@ -137,6 +174,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "antigravity",
     name: "Antigravity",
+    kind: "machine",
+    description: "Google's AI-first code editor, based on VS Code.",
+    snapshot: ["extensions", "settings", "keybindings", "tasks", "snippets"],
     category: "Editors & AI",
     detect: {
       command: "antigravity",
@@ -153,6 +193,9 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "claude",
     name: "Claude Code",
+    kind: "machine",
+    description: "Anthropic's AI coding assistant that works in your terminal.",
+    snapshot: ["settings", "CLAUDE.md", "keybindings", "commands", "agents", "skills", "output styles", "MCP servers"],
     category: "Editors & AI",
     detect: { command: "claude", versionArgs: ["--version"], paths: { windows: ["%USERPROFILE%\\.local\\bin\\claude.exe"], macos: ["~/.local/bin/claude"], linux: ["~/.local/bin/claude"] } },
     install: {
@@ -166,6 +209,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "codex",
     name: "Codex CLI",
+    kind: "machine",
+    description: "OpenAI's AI coding assistant for the terminal.",
     category: "Editors & AI",
     detect: { command: "codex", versionArgs: ["--version"] },
     install: npmGlobal("@openai/codex"),
@@ -177,6 +222,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "postgresql",
     name: "PostgreSQL",
+    kind: "machine",
+    description: "Relational database server (version 17) with the psql client.",
     category: "Databases",
     detect: { command: "psql", versionArgs: ["--version"], paths: { windows: ["%ProgramFiles%\\PostgreSQL\\17\\bin\\psql.exe"] } },
     install: {
@@ -189,6 +236,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "pgadmin",
     name: "pgAdmin",
+    kind: "machine",
+    description: "Graphical tool for managing PostgreSQL databases.",
     category: "Databases",
     detect: { paths: { windows: ["%ProgramFiles%\\pgAdmin 4\\runtime\\pgAdmin4.exe", "%LOCALAPPDATA%\\Programs\\pgAdmin 4\\runtime\\pgAdmin4.exe"], macos: ["/Applications/pgAdmin 4.app"] } },
     install: {
@@ -200,6 +249,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "mongodb",
     name: "MongoDB",
+    kind: "machine",
+    description: "Document database server (MongoDB Community).",
     category: "Databases",
     detect: { command: "mongod", versionArgs: ["--version"], paths: { windows: ["%ProgramFiles%\\MongoDB\\Server"] } },
     install: {
@@ -212,6 +263,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "compass",
     name: "MongoDB Compass",
+    kind: "machine",
+    description: "Graphical tool for browsing and querying MongoDB.",
     category: "Databases",
     detect: { paths: { windows: ["%LOCALAPPDATA%\\MongoDBCompass\\MongoDBCompass.exe", "%ProgramFiles%\\MongoDB Compass\\MongoDBCompass.exe"], macos: ["/Applications/MongoDB Compass.app"] } },
     install: {
@@ -225,6 +278,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "docker",
     name: "Docker",
+    kind: "machine",
+    description: "Runs apps in containers. On Windows this is Docker Desktop, which runs on WSL 2.",
     category: "Tools",
     detect: { command: "docker", versionArgs: ["--version"], paths: { windows: ["%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe"], macos: ["/Applications/Docker.app"] } },
     install: {
@@ -246,6 +301,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "postman",
     name: "Postman",
+    kind: "machine",
+    description: "App for building and testing HTTP APIs.",
     category: "Tools",
     detect: { paths: { windows: ["%LOCALAPPDATA%\\Postman\\Postman.exe"], macos: ["/Applications/Postman.app"] } },
     install: {
@@ -258,6 +315,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "prettier",
     name: "Prettier",
+    kind: "machine",
+    description: "Code formatter for JavaScript, TypeScript, CSS, JSON, Markdown and more.",
     category: "Tools",
     detect: { command: "prettier", versionArgs: ["--version"] },
     install: npmGlobal("prettier"),
@@ -267,6 +326,8 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "eslint",
     name: "ESLint",
+    kind: "machine",
+    description: "Linter that finds problems in JavaScript and TypeScript code.",
     category: "Tools",
     detect: { command: "eslint", versionArgs: ["--version"] },
     install: npmGlobal("eslint"),
