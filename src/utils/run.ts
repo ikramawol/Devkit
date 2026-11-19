@@ -32,7 +32,7 @@ export interface Runner {
 const isWindows = process.platform === "win32";
 
 // Arguments we pass to cmd.exe must be boring. This blocks &, |, ^, %, quotes, etc.
-const SAFE_ARG = /^[\w.\-@:=\/\\ +~,]+$/;
+const SAFE_ARG = /^[\w.\-@:=/\\ +~,]+$/;
 
 function toResult(r: ReturnType<typeof spawnSync>): RunResult {
   const stdout = (r.stdout ?? "").toString().trim();
