@@ -36,6 +36,7 @@ export function fakeRunner(opts: {
   const installs: Record<string, string> = {
     "Git.Git": "git", "OpenJS.NodeJS.LTS": "node", "@openai/codex": "codex",
     "Microsoft.VisualStudioCode": "code", "install.ps1": "claude", "Docker.DockerDesktop": "docker",
+    "PostgreSQL.PostgreSQL.17": "psql",
   };
   const runner: Runner = {
     which: (c) => (opts.installed.has(c) ? `/fake/bin/${c}` : null),

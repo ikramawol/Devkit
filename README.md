@@ -112,9 +112,46 @@ dkit doctor                              # inside a project: also lists which li
 
 | Group | Libraries (id) |
 |---|---|
-| Frameworks | Hono (`hono`) |
-| Database libraries | Kysely (`kysely`), Drizzle ORM (`drizzle`: drizzle-orm + dev drizzle-kit), Prisma (`prisma`: @prisma/client + dev prisma), dbmate (`dbmate`, dev) |
+| Frameworks | Hono (`hono`), Express (`express` + dev @types/express) |
+| Database libraries | Kysely (`kysely`), Drizzle ORM (`drizzle`: drizzle-orm + dev drizzle-kit), Prisma (`prisma`: @prisma/client + dev prisma at the same version), dbmate (`dbmate`, dev), node-postgres (`pg` + dev @types/pg) |
 | Auth | Better Auth (`better-auth`) |
+
+## Stacks: start a project with everything in one go
+
+A stack is a ready-made combination of tools and libraries. Use it to create a new project, or to add the whole combination to a project you already have.
+
+```powershell
+dkit stack list                                       # built-in and your own stacks
+dkit stack info next-hono                             # what's in it, and what you already have
+
+dkit stack install hono-api --project my-api          # new project: tools, then the official starter, then libraries
+cd my-shop; dkit stack install solid-hono             # existing project: adds only what's missing
+dkit stack install next-hono --project web --without drizzle --with prisma   # swap parts
+```
+
+| Stack (id) | Creates the project with | Tools | Libraries |
+|---|---|---|---|
+| `next-hono` | create-next-app | Node.js, PostgreSQL | Hono, Better Auth, Drizzle, pg |
+| `solid-hono` | create-solid (Vite + TS) | Node.js, PostgreSQL | Hono, Kysely, pg, dbmate |
+| `hono-api` | create-hono (Node.js template) | Node.js, PostgreSQL | Hono, Drizzle, pg |
+| `express-prisma` | your package manager's `init` | Node.js, PostgreSQL | Express, Prisma |
+
+How it works:
+
+- **New project** (`--project <new-folder>`): installs the tools that are missing, runs the framework's own official starter without prompts, then adds the libraries with the project's package manager (`--pm` to choose; npm by default). The folder must not exist yet or be empty.
+- **Existing project** (you're inside one): no starter; only the missing tools and libraries are added.
+- Everything is picked by default; untick what you don't want, or use `--without` / `--with`. Already-installed PostgreSQL, Node.js etc. are detected and left alone.
+- `--dry-run` shows every command first.
+
+### Your own stacks
+
+```powershell
+dkit stack save my-api --from hono-api --without drizzle --with kysely,dbmate
+dkit stack save tools-only --with git,node,vscode,docker
+dkit stack install my-api --project new-thing
+```
+
+Saved stacks are JSON files in `~/.dkit/stacks/`. To share one, send the file; others run `dkit stack install ./my-api.json --project app`. A stack file can only list catalog ids and a starter id: anything else (like a command to run) is refused, so a stack from someone else can't run anything unexpected.
 
 ## Migrate to a new PC or OS
 
@@ -163,13 +200,15 @@ npm test                  # tests run on a fake machine; nothing is really insta
 ```
 src/
   index.ts              CLI entry
-  commands/             doctor, install, migrate
+  commands/             doctor, info, install, stack, migrate
   core/catalog.ts       every tool and library: how to find and install it on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
   core/prereqs.ts       OS prerequisites (Windows features, WSL, ...): check and set up
   core/maturity.ts      support level (L1-L5) per tool, worked out from its catalog entry
   core/project.ts       projects: package.json, package manager, adding libraries
+  core/starters.ts      official project starters (create-next-app, create-solid, create-hono, init)
+  core/stack.ts         stack recipes: built-ins, validation, save/load, install
   adapters/methods.ts   winget, brew, apt, npm, scripts
   migrate/              backup format, export, restore
   utils/                safe command runner, prompts, logger

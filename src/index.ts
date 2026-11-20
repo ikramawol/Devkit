@@ -4,6 +4,7 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
 import { registerMigrate } from "./commands/migrate.js";
+import { registerStack } from "./commands/stack.js";
 
 const program = new Command()
   .name("dkit")
@@ -13,6 +14,7 @@ const program = new Command()
 registerDoctor(program);
 registerInfo(program);
 registerInstall(program);
+registerStack(program);
 registerMigrate(program);
 
 program.parseAsync().catch((err: unknown) => {

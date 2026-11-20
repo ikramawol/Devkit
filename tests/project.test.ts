@@ -170,3 +170,27 @@ test("migrate export records machine tools only, never project libraries", async
 
 // Keep the type import used.
 export type { ProjectInfo };
+
+test("Prisma's CLI is added at the same version as @prisma/client", async () => {
+  const dir = makeProject({});
+  const { runner, runs } = pmMachine(["node"]);
+  const ctx = ctxFor(runner, dir);
+  await executePlan(buildPlan(["prisma"], ctx), ctx);
+  assert.deepEqual(runs.map((r) => r.line), ["npm install @prisma/client", "npm install -D prisma@1.0.0"]);
+});
+
+test("'needs a database driver' is only said when the project has none", async () => {
+  for (const [ids, expectNote] of [[["kysely"], true], [["kysely", "pg"], false]] as const) {
+    const dir = makeProject({});
+    const { runner } = pmMachine(["node"]);
+    const ctx = ctxFor(runner, dir);
+    const report = await executePlan(buildPlan([...ids], ctx), ctx);
+    assert.equal(report.notes.some((n) => n.includes("database driver")), expectNote, ids.join("+"));
+  }
+});
+
+test("Windows' unsigned exit codes are shown as the real (negative) code", async () => {
+  const { exitText } = await import("../src/core/engine.js");
+  assert.match(exitText(4294963219), /^-4077 \(usually a network problem/);
+  assert.equal(exitText(1), "1");
+});

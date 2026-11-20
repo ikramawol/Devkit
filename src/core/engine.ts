@@ -158,7 +158,9 @@ export function printPlan(plan: InstallPlan, ctx: EngineContext) {
     const p = plan.project;
     log.info(c.bold(`\nWill add to ${p.name ?? p.dir}`) + c.dim(`  ${p.dir} · ${p.pm} (${p.pmReason})`));
     for (const item of plan.projectAdd) {
-      const dev = item.packages?.dev?.length ? c.dim(` + dev: ${item.packages.dev.join(", ")}`) : "";
+      const same = item.packages?.sameVersion ?? {};
+      const devNames = (item.packages?.dev ?? []).map((d) => (same[d] ? `${d} (same version as ${same[d]})` : d));
+      const dev = devNames.length ? c.dim(` + dev: ${devNames.join(", ")}`) : "";
       log.info(`  • ${item.name}  ${(item.packages?.deps ?? []).join(", ")}${dev}`);
     }
     for (const cmd of projectCommands(plan)) log.info(c.dim(`  runs: ${describeAdd(p.pm, cmd.packages, cmd.dev)}`));
@@ -186,6 +188,26 @@ function projectCommands(plan: InstallPlan): { packages: string[]; dev: boolean 
     ...(deps.length ? [{ packages: deps, dev: false }] : []),
     ...(dev.length ? [{ packages: dev, dev: true }] : []),
   ];
+}
+
+/**
+ * Windows reports some failures as huge unsigned numbers (4294963219 is -4077, a reset connection).
+ * Show the real code, and say what negative codes usually mean.
+ */
+export function exitText(code: number | null): string {
+  if (code === null) return "an error";
+  const signed = code > 0x7fffffff ? code - 0x100000000 : code;
+  return signed < 0 ? `${signed} (usually a network problem: run the same command again)` : String(signed);
+}
+
+/** prisma → prisma@7.10.1 when it must match the @prisma/client already in the project. */
+function pinSameVersion(plan: InstallPlan, packages: string[], project: ProjectInfo): string[] {
+  const now = readProject(project.dir, { pm: project.pm });
+  return packages.map((pkg) => {
+    const other = plan.projectAdd.map((i) => i.packages?.sameVersion?.[pkg]).find(Boolean);
+    const version = other ? now?.deps[other]?.replace(/^[\^~>=<\s]+/, "") : undefined;
+    return version && /^[\w.+-]+$/.test(version) ? `${pkg}@${version}` : pkg;
+  });
 }
 
 export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promise<InstallReport> {
@@ -277,10 +299,12 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
       runner.refreshPath();
       const errors: string[] = [];
       for (const cmd of projectCommands(plan)) {
-        log.step(`Adding to ${p.name ?? p.dir}: ${describeAdd(p.pm, cmd.packages, cmd.dev)}`);
-        const { command, args } = addCommand(p.pm, cmd.packages, cmd.dev);
+        // Dev packages run after regular ones, so a version to match (e.g. @prisma/client's) is known by now.
+        const packages = cmd.dev ? pinSameVersion(plan, cmd.packages, p) : cmd.packages;
+        log.step(`Adding to ${p.name ?? p.dir}: ${describeAdd(p.pm, packages, cmd.dev)}`);
+        const { command, args } = addCommand(p.pm, packages, cmd.dev);
         const r = runner.run(command, args, { inherit: true, cwd: p.dir });
-        if (!r.ok) errors.push(r.error ?? `${p.pm} exited with ${r.code}`);
+        if (!r.ok) errors.push(r.error ?? `${p.pm} exited with ${exitText(r.code)}`);
       }
       // Verify against package.json itself rather than trusting exit codes.
       const after = readProject(p.dir, { pm: p.pm });
@@ -290,6 +314,11 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
           log.ok(`${item.name} ${s.version ?? ""}`);
           report.results.push({ id: item.id, name: item.name, outcome: "installed" });
           for (const n of item.notes ?? []) report.notes.push(`${item.name}: ${n}`);
+          // e.g. Kysely without a database driver: say so, but only if the project really has none.
+          const sug = item.suggests;
+          if (sug && after && !sug.ids.some((id) => { const i = getItem(id); return i && detectInProject(i, after).installed; })) {
+            report.notes.push(`${item.name} also needs ${sug.what}, e.g. ${sug.ids.map((id) => getItem(id)?.name ?? id).join(" or ")}: dkit install ${sug.ids[0]}`);
+          }
         } else {
           const missing = allPackages(item).filter((pkg) => !(after && pkg in after.deps));
           const message = errors[0] ?? `${missing.join(", ")} not in package.json`;

@@ -48,7 +48,14 @@ export interface CatalogItem {
   /** What `dkit migrate` saves and restores for it. Kept honest by a test against src/migrate. */
   snapshot?: string[];
   /** Project resources: the npm packages added to the project (`dev` = devDependencies). */
-  packages?: { deps?: string[]; dev?: string[] };
+  packages?: {
+    deps?: string[];
+    dev?: string[];
+    /** Packages that must match another's version: { prisma: "@prisma/client" } adds prisma@<client's version>. */
+    sameVersion?: Record<string, string>;
+  };
+  /** Project resources that usually need one of these too (e.g. Kysely needs a database driver). */
+  suggests?: { ids: string[]; what: string };
   category: Category;
   detect: Detect;
   install: Partial<Record<OS, Method>>;
@@ -390,6 +397,16 @@ export const CATALOG: CatalogItem[] = [
     packages: { deps: ["hono"] },
   },
   {
+    id: "express",
+    name: "Express",
+    kind: "project",
+    description: "The classic minimal web framework for Node.js.",
+    category: "Frameworks",
+    detect: {},
+    install: {},
+    packages: { deps: ["express"], dev: ["@types/express"] },
+  },
+  {
     id: "better-auth",
     name: "Better Auth",
     kind: "project",
@@ -409,7 +426,18 @@ export const CATALOG: CatalogItem[] = [
     detect: {},
     install: {},
     packages: { deps: ["kysely"] },
-    notes: ["Kysely also needs a database driver, e.g. `pg` for PostgreSQL."],
+    suggests: { ids: ["pg"], what: "a database driver" },
+  },
+  {
+    id: "pg",
+    name: "node-postgres (pg)",
+    kind: "project",
+    description: "PostgreSQL driver for Node.js, used by Kysely, Drizzle and others.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { deps: ["pg"], dev: ["@types/pg"] },
+    notes: ["Set DATABASE_URL, e.g. postgres://postgres:<password>@localhost:5432/<db>"],
   },
   {
     id: "drizzle",
@@ -420,7 +448,7 @@ export const CATALOG: CatalogItem[] = [
     detect: {},
     install: {},
     packages: { deps: ["drizzle-orm"], dev: ["drizzle-kit"] },
-    notes: ["Drizzle also needs a database driver, e.g. `pg` for PostgreSQL."],
+    suggests: { ids: ["pg"], what: "a database driver" },
   },
   {
     id: "prisma",
@@ -430,7 +458,8 @@ export const CATALOG: CatalogItem[] = [
     category: "Database libraries",
     detect: {},
     install: {},
-    packages: { deps: ["@prisma/client"], dev: ["prisma"] },
+    // The prisma CLI must match @prisma/client. (Its npm "latest" tag has pointed at a release candidate.)
+    packages: { deps: ["@prisma/client"], dev: ["prisma"], sameVersion: { prisma: "@prisma/client" } },
     notes: ["Run `npx prisma init` to create the schema and .env."],
   },
   {
