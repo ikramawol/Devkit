@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerDoctor } from "./commands/doctor.js";
+import { registerEnv } from "./commands/env.js";
 import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
 import { registerMigrate } from "./commands/migrate.js";
@@ -15,6 +16,7 @@ registerDoctor(program);
 registerInfo(program);
 registerInstall(program);
 registerStack(program);
+registerEnv(program);
 registerMigrate(program);
 
 program.parseAsync().catch((err: unknown) => {

@@ -8,6 +8,7 @@ import { runMethod } from "../adapters/methods.js";
 import type { Select } from "../utils/prompt.js";
 import { c } from "../utils/logger.js";
 import { EDITORS } from "./editors.js";
+import { NPM_NAME } from "../manifest/discover.js";
 import {
   type Backup, type BundledFile, REDACTED, foreignPaths, unbundle, writeWithBackup,
 } from "./bundle.js";
@@ -37,7 +38,6 @@ export interface RestoreReport {
   notes: string[];
 }
 
-const NPM_NAME = /^(@[\w.-]+\/)?[\w.-]+$/;
 
 export function validateBackup(data: unknown): Backup {
   const b = data as Backup;

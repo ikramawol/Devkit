@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, copyFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { OS } from "../core/platform.js";
+import type { Manifest } from "../manifest/manifest.js";
 
 /** One file carried in the backup. `path` is relative and always uses forward slashes. */
 export interface BundledFile {
@@ -36,6 +37,8 @@ export interface Backup {
   shell: { kind: "powershell" | "bash" | "zsh"; file: BundledFile }[];
   /** Things the user must do by hand (secrets removed, etc.). */
   notes: string[];
+  /** The same description `dkit scan` makes, so `dkit status <backup>` works. Missing in backups from dkit 0.2 and older. */
+  manifest?: Manifest;
 }
 
 export const sha256 = (buf: Buffer) => createHash("sha256").update(buf).digest("hex");
