@@ -9,6 +9,7 @@ import {
 import type { PlatformInfo } from "./platform.js";
 import { PACKAGE_MANAGERS, pmRequires, readProject, type PackageManager } from "./project.js";
 import { checkNewProjectDir, describeSteps, getStarter, runStarter, starterRequires, STARTERS } from "./starters.js";
+import { findTeam, listTeams, teamsDir } from "./team.js";
 
 /**
  * A stack recipe: a reusable combination of catalog resources, plus an optional starter
@@ -30,10 +31,12 @@ export interface Recipe {
   notes?: string[];
 }
 
-export type RecipeSource = "built-in" | "saved" | "file";
+export type RecipeSource = "built-in" | "saved" | "team" | "file";
 export interface LoadedRecipe extends Recipe {
   source: RecipeSource;
   path?: string;
+  /** For team stacks: the team's id (`dkit team list`). */
+  team?: string;
 }
 
 const DB = ["node", "postgresql"];
@@ -144,11 +147,25 @@ export function listRecipes(platform: PlatformInfo): { recipes: LoadedRecipe[]; 
       }
     }
   }
+  // Team stacks keep their ids even when they clash with yours: `dkit stack install <team>/<id>` picks one.
+  const teams = listTeams(platform);
+  for (const t of teams.teams) {
+    recipes.push(...t.stacks);
+    problems.push(...t.problems.map((p) => `team ${t.id}: ${p}`));
+  }
+  problems.push(...teams.problems.map((p) => `team ${p}`));
   return { recipes, problems };
 }
 
-/** A recipe id (built-in or saved), or a path to a recipe .json file. */
+/** A recipe id (built-in, saved or team), `<team>/<id>`, or a path to a recipe .json file. */
 export function findRecipe(ref: string, platform: PlatformInfo): LoadedRecipe {
+  const teamRef = ref.toLowerCase().match(/^([a-z0-9][a-z0-9-]*)\/([a-z0-9][a-z0-9-]*)$/);
+  if (teamRef && existsSync(path.join(teamsDir(platform), teamRef[1])) && !existsSync(ref)) {
+    const team = findTeam(platform, teamRef[1]);
+    const found = team.stacks.find((s) => s.id === teamRef[2]);
+    if (!found) throw new Error(`Team ${team.id} has no stack "${teamRef[2]}". Its stacks: ${team.stacks.map((s) => s.id).join(", ") || "none"}`);
+    return found;
+  }
   if (ref.toLowerCase().endsWith(".json") || /[\\/]/.test(ref)) {
     const p = path.resolve(ref);
     if (!existsSync(p)) throw new Error(`Recipe file not found: ${p}`);
@@ -156,9 +173,13 @@ export function findRecipe(ref: string, platform: PlatformInfo): LoadedRecipe {
     try { data = JSON.parse(readFileSync(p, "utf8")); } catch { throw new Error(`${p} isn't valid JSON.`); }
     return { ...validateRecipe(data, p), source: "file", path: p };
   }
-  const found = listRecipes(platform).recipes.find((r) => r.id === ref.toLowerCase());
-  if (!found) throw new Error(`Unknown stack "${ref}". See \`dkit stack list\`.`);
-  return found;
+  const matches = listRecipes(platform).recipes.filter((r) => r.id === ref.toLowerCase());
+  if (!matches.length) throw new Error(`Unknown stack "${ref}". See \`dkit stack list\`.`);
+  // Built-in and your own stacks win; a team stack is used by plain id only when it's the only one.
+  const own = matches.find((r) => r.source !== "team");
+  if (own) return own;
+  if (matches.length > 1) throw new Error(`Several teams have a stack "${ref}". Pick one: ${matches.map((r) => `${r.team}/${r.id}`).join(", ")}`);
+  return matches[0];
 }
 
 /** Add and remove components: --with prisma --without drizzle. */

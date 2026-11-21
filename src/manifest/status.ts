@@ -62,9 +62,10 @@ export function printComparison(cmp: Comparison, log: Logger, os: string) {
   }
   if (cmp.extra.length) log.info(c.dim(`  Also on this PC, not in the manifest: ${cmp.extra.map((e) => e.name).join(", ")}`));
 
-  if (cmp.editors.length) {
+  const editors = cmp.editors.filter((e) => e.total);
+  if (editors.length) {
     log.info(c.bold("\nEditor extensions"));
-    for (const e of cmp.editors) {
+    for (const e of editors) {
       const name = e.name.padEnd(22);
       if (!e.installed) log.info(`  ${c.red("✗")} ${name} ${c.dim(`not installed: ${e.total} extensions waiting`)}`);
       else if (!e.missing.length) log.info(`  ${c.green("✓")} ${name} ${c.dim(`all ${e.total}`)}`);

@@ -181,6 +181,37 @@ Safe to share:
 
 Run `dkit scan` inside a project to also record its package manager and libraries. `dkit migrate export` puts the same manifest inside every backup.
 
+## Share a setup with your team
+
+A team keeps its setup in a Git repository (private is fine). Everyone connects once, and dkit keeps it up to date.
+
+```
+dkit-team.json     the team's name and description
+baseline.json      what everyone should have (a manifest, made with dkit scan)
+stacks/*.json      the team's stacks
+```
+
+Whoever sets it up:
+
+```powershell
+dkit team init dev-setup --name "Acme web team" --stacks my-api   # baseline from this PC, plus your stacks
+# edit dev-setup/baseline.json to keep only what's for everyone, then push it to GitHub
+```
+
+Everyone else:
+
+```powershell
+dkit team add https://github.com/acme/dev-setup     # or git@github.com:acme/dev-setup.git
+dkit team status                  # fetch the latest, compare this PC with the baseline, offer to install what's missing
+dkit team status --check          # only report (CI, onboarding scripts)
+dkit stack list                   # the team's stacks are listed too
+dkit stack install my-api --project app       # or acme/my-api if the id clashes
+dkit team update                  # get the latest stacks
+dkit team list / dkit team remove dev-setup
+```
+
+A team repository gets the same checks as a file from a stranger. Stacks and the baseline can only name catalog tools, libraries and starters. Git settings follow the manifest rules above, and anything that doesn't fit is reported and not used. dkit clones with symlinks turned off and only accepts https, ssh and local Git URLs. Private repositories work when `git clone <url>` works for you.
+
 ## Migrate to a new PC or OS
 
 On the old machine:
@@ -248,7 +279,7 @@ npm test                  # tests run on a fake machine; nothing is really insta
 ```
 src/
   index.ts              CLI entry
-  commands/             doctor, info, install, stack, scan/status, migrate
+  commands/             doctor, info, install, stack, scan/status, migrate, team
   core/catalog.ts       every tool and library: how to find and install it on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
@@ -257,6 +288,7 @@ src/
   core/project.ts       projects: package.json, package manager, adding libraries
   core/starters.ts      official project starters (create-next-app, create-solid, create-hono, init)
   core/stack.ts         stack recipes: built-ins, validation, save/load, install
+  core/team.ts          team setups: a Git repo with stacks and a baseline (add, update, init)
   adapters/methods.ts   winget, brew, apt, npm, scripts
   manifest/             scan this machine, the manifest format, compare and fix (dkit scan / status)
   migrate/              backup format, encrypted .dkit archive, export, inspect/compare, restore,

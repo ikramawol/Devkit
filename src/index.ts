@@ -7,6 +7,7 @@ import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
 import { registerMigrate } from "./commands/migrate.js";
 import { registerStack } from "./commands/stack.js";
+import { registerTeam } from "./commands/team.js";
 
 // dist/index.js → ../package.json (shipped with the npm package), so the version is never out of date.
 const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
@@ -22,6 +23,7 @@ registerInstall(program);
 registerStack(program);
 registerEnv(program);
 registerMigrate(program);
+registerTeam(program);
 
 program.parseAsync().catch((err: unknown) => {
   // Ctrl+C inside a checklist

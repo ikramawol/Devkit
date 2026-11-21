@@ -24,14 +24,19 @@ export function registerStack(program: Command) {
 
   stack
     .command("list")
-    .description("Show built-in and saved stacks")
+    .description("Show built-in, saved and team stacks")
     .action(() => {
       const ctx = makeContext({});
       const { recipes, problems } = listRecipes(ctx.platform);
-      for (const source of ["built-in", "saved"] as const) {
-        const rs = recipes.filter((r) => r.source === source);
+      const groups: [string, typeof recipes][] = [
+        ["\nBuilt-in stacks", recipes.filter((r) => r.source === "built-in")],
+        [`\nYour stacks  ${c.dim(stacksDir(ctx.platform))}`, recipes.filter((r) => r.source === "saved")],
+      ];
+      for (const team of [...new Set(recipes.filter((r) => r.source === "team").map((r) => r.team!))])
+        groups.push([`\nTeam ${team}  ${c.dim("(use as " + team + "/<id> if the id clashes)")}`, recipes.filter((r) => r.team === team)]);
+      for (const [title, rs] of groups) {
         if (!rs.length) continue;
-        console.log(c.bold(source === "built-in" ? "\nBuilt-in stacks" : `\nYour stacks  ${c.dim(stacksDir(ctx.platform))}`));
+        console.log(c.bold(title));
         for (const r of rs) {
           console.log(`  ${c.cyan(r.id.padEnd(16))} ${r.name}`);
           if (r.description) console.log(`  ${" ".repeat(16)} ${c.dim(r.description)}`);

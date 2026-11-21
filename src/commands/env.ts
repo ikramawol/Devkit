@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { compareManifest, differenceCount, loadManifest, scanEnvironment } from "../manifest/manifest.js";
+import { compareManifest, differenceCount, loadManifest, scanEnvironment, type Manifest } from "../manifest/manifest.js";
 import { fixDifferences, printComparison, printScan } from "../manifest/status.js";
 import { c } from "../utils/logger.js";
 import { makePassword } from "../utils/prompt.js";
@@ -49,19 +49,26 @@ export function registerEnv(program: Command) {
     .option("--check", "only report; exit with code 1 if anything differs (for scripts and CI)")
     .option("--dry-run", "show what would be installed, change nothing")
     .option("-y, --yes", "install without asking")
-    .action(async (file: string | undefined, opts: CommonOpts & ProjectOpts & { check?: boolean }) => {
+    .action(async (file: string | undefined, opts: StatusOpts) => {
       const manifestFile = file ?? DEFAULT_MANIFEST;
       const ask = makePassword();
       const manifest = await loadManifest(manifestFile, () => ask("Backup password"));
-      const ctx = { ...makeContext(opts), ...resolveProject(opts) };
-      ctx.log.info(c.bold(`dkit status  ${c.dim(`this PC vs ${manifestFile}`)}`));
-      const cmp = compareManifest(manifest, ctx);
-      printComparison(cmp, ctx.log, ctx.platform.os);
-
-      if (opts.check) {
-        if (differenceCount(cmp)) process.exitCode = 1;
-        return;
-      }
-      if (differenceCount(cmp)) await fixDifferences(cmp, ctx);
+      await runStatus(manifest, manifestFile, opts);
     });
+}
+
+export type StatusOpts = CommonOpts & ProjectOpts & { check?: boolean };
+
+/** Compare this machine with a manifest, then (unless --check) offer to fix the differences. Shared by `status` and `team status`. */
+export async function runStatus(manifest: Manifest, label: string, opts: StatusOpts) {
+  const ctx = { ...makeContext(opts), ...resolveProject(opts) };
+  ctx.log.info(c.bold(`dkit status  ${c.dim(`this PC vs ${label}`)}`));
+  const cmp = compareManifest(manifest, ctx);
+  printComparison(cmp, ctx.log, ctx.platform.os);
+
+  if (opts.check) {
+    if (differenceCount(cmp)) process.exitCode = 1;
+    return;
+  }
+  if (differenceCount(cmp)) await fixDifferences(cmp, ctx);
 }
