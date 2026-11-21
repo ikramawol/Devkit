@@ -112,7 +112,7 @@ export function buildPlan(ids: string[], ctx: DetectDeps & ProjectTarget): Insta
 
     visitDeps(requiresFor(item, os));
 
-    const method = item.install[os];
+    const method = (ctx.platform.wsl && item.wslInstall) || item.install[os];
     if (!method) return void plan.manual.push({ item, url: "not available for this OS yet" });
     if (method.type === "manual") return void plan.manual.push({ item, url: method.url });
     plan.toInstall.push(item);

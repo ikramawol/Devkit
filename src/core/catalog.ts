@@ -66,6 +66,8 @@ export interface CatalogItem {
   category: Category;
   detect: Detect;
   install: Partial<Record<OS, Method>>;
+  /** Used instead of install.linux inside WSL, when the Linux way would clash with the Windows side (Docker Desktop). */
+  wslInstall?: Method;
   /** Other catalog ids that must be installed first. */
   requires?: Partial<Record<OS, string[]>> & { all?: string[] };
   /** OS setup that must be in place first (Windows features, WSL, ...). Checked by `doctor`, set up by `install`. */
@@ -346,6 +348,8 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "brew", cask: "docker-desktop" },
       linux: { type: "apt", packages: ["docker.io"] },
     },
+    // In WSL, Docker Desktop on Windows provides `docker`: turn on Settings → Resources → WSL integration for this distro.
+    wslInstall: { type: "manual", url: "Docker Desktop → Settings → Resources → WSL integration → turn on this distro (https://docs.docker.com/desktop/features/wsl/)" },
     prereqs: {
       windows: [
         { type: "windows-build", min: 19045 },

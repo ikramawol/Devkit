@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import type { PlatformInfo } from "../core/platform.js";
-import { editorUserDir } from "../core/platform.js";
+import { editorSettingsOnWindows, editorUserDir } from "../core/platform.js";
 import { getItem } from "../core/catalog.js";
 import { installTools, type EngineContext } from "../core/engine.js";
 import { runMethod } from "../adapters/methods.js";
@@ -135,6 +135,10 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
       } else if (eb.extensions.length) {
         report.notes.push(`${eb.name} is not installed (or \`${def.cli}\` isn't on PATH): ${eb.extensions.length} extensions were not installed. Re-run restore with --only editors after installing it.`);
       }
+      if (eb.files.length && editorSettingsOnWindows(platform, def.dirName)) {
+        report.notes.push(`${eb.name} runs on Windows when you use it from WSL, so its ${eb.files.length} settings file(s) weren't written here. Restore them on Windows, or turn on Settings Sync.`);
+        continue;
+      }
       for (const f of eb.files) write(path.join(userDir, ...f.path.split("/")), f, `${eb.name} ${f.path}`);
     }
   }
@@ -243,6 +247,7 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
   // ── Shell profile ────────────────────────────────────────
   if (want("shell")) {
     log.info(c.bold("\nShell profile"));
+    if (!b.shell.length) log.info(`  ${c.dim("none in the backup")}`);
     const fitsHere = (k: string) => (platform.os === "windows" ? k === "powershell" : k !== "powershell");
 
     // Profiles for another OS's shell: convert what can be converted into one file next to your own profile.

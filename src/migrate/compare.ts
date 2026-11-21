@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { PlatformInfo } from "../core/platform.js";
-import { editorUserDir } from "../core/platform.js";
+import { editorSettingsOnWindows, editorUserDir } from "../core/platform.js";
 import { getItem } from "../core/catalog.js";
 import { shareableGit } from "../manifest/discover.js";
 import type { Manifest } from "../manifest/manifest.js";
@@ -25,7 +25,7 @@ export function fileTargets(b: Backup, platform: PlatformInfo): FileTarget[] {
   const join = (base: string, rel: string) => path.join(base, ...rel.split("/"));
   for (const eb of b.editors) {
     const def = EDITORS.find((e) => e.id === eb.id);
-    if (!def) continue;
+    if (!def || editorSettingsOnWindows(platform, def.dirName)) continue;
     for (const f of eb.files) out.push({ section: "editors", owner: eb.name, file: f, target: join(editorUserDir(platform, def.dirName), f.path) });
   }
   if (b.git.excludesFile) out.push({ section: "git", owner: "Git", file: b.git.excludesFile, target: path.join(platform.home, ".gitignore_global") });
@@ -99,7 +99,7 @@ export function printInspect(file: string, info: BackupFileInfo, b: Backup, log:
   log.info(`  ${short(b.tools.map((id) => `${getItem(id)?.name ?? id}${versions.get(id) ? ` ${versions.get(id)}` : ""}`), 30)}`);
   if (b.extraApps.ids.length) log.info(`${c.bold(`Other apps (${b.extraApps.ids.length})`)}: ${short(b.extraApps.ids)}`);
   for (const e of b.editors)
-    log.info(`${c.bold(e.name)}: ${e.extensions.length} extensions, ${e.files.length} settings files ${c.dim(`(${short(e.files.map((f) => f.path), 5)})`)}`);
+    log.info(`${c.bold(e.name)}: ${e.extensions.length} extensions, ${e.files.length} settings files${e.files.length ? " " + c.dim(`(${short(e.files.map((f) => f.path), 5)})`) : ""}`);
   if (b.git.config.length || b.git.excludesFile) log.info(`${c.bold("Git")}: ${b.git.config.length} settings${b.git.excludesFile ? ", global gitignore" : ""}`);
   const mcp = Object.keys(b.claude.mcpServers);
   if (b.claude.files.length || mcp.length)

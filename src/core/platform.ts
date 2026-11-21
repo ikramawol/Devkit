@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -43,4 +44,13 @@ export function detectPlatform(): PlatformInfo {
 /** VS Code and its forks keep settings in <appData>/<dirName>/User on every OS. */
 export function editorUserDir(platform: PlatformInfo, dirName: string): string {
   return path.join(platform.appData, dirName, "User");
+}
+
+/**
+ * In WSL, VS Code-style editors usually run on Windows and keep their settings there, so files
+ * written to Linux's ~/.config/<editor>/User would do nothing. Only a Linux-installed editor (whose
+ * settings folder already exists) gets them.
+ */
+export function editorSettingsOnWindows(platform: PlatformInfo, dirName: string, exists = existsSync): boolean {
+  return !!platform.wsl && !exists(editorUserDir(platform, dirName));
 }

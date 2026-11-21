@@ -9,6 +9,8 @@ import { runMethod, setIsRoot } from "../src/adapters/methods.js";
 import { listNpmGlobals } from "../src/manifest/discover.js";
 import { createBackup } from "../src/migrate/export.js";
 import { restoreBackup } from "../src/migrate/restore.js";
+import { fileTargets } from "../src/migrate/compare.js";
+import { buildPlan } from "../src/core/engine.js";
 import { convertProfile, transformGit } from "../src/migrate/transform.js";
 import { silentLogger } from "../src/utils/logger.js";
 import { engineCtx, fakeRunner, ok, tempPlatform } from "./helpers.js";
@@ -52,6 +54,31 @@ test("inside WSL, Windows programs (/mnt/c/...) don't count as Linux tools, exce
 
   const plainLinux = { runner, platform: tempPlatform("linux"), exists: () => false };
   assert.equal(detectItem(getItem("node")!, plainLinux).installed, true, "outside WSL a /mnt path is just a path");
+});
+
+test("inside WSL: Docker means turning on Docker Desktop's WSL integration, not apt", () => {
+  const { runner } = fakeRunner({ installed: new Set() });
+  const wsl = { ...tempPlatform("linux"), wsl: true };
+  const plan = buildPlan(["docker"], { runner, platform: wsl, exists: () => false });
+  assert.equal(plan.toInstall.length, 0);
+  assert.match(plan.manual[0].url, /WSL integration/);
+  const plain = buildPlan(["docker"], { runner, platform: tempPlatform("linux"), exists: () => false });
+  assert.deepEqual(plain.toInstall.map((i) => i.id), ["docker"]);
+});
+
+test("inside WSL, VS Code settings files aren't written to Linux (VS Code keeps them on Windows)", async () => {
+  const mac = tempPlatform("macos");
+  put(path.join(mac.appData, "Code", "User", "settings.json"), "{}");
+  const { runner } = fakeRunner({ installed: new Set(["code"]) });
+  const backup = createBackup({ runner, platform: mac, log: silentLogger, exists: () => false });
+  assert.equal(backup.editors[0].files.length, 1);
+
+  const wsl = { ...tempPlatform("linux"), wsl: true };
+  const ctx = { ...engineCtx(fakeRunner({ installed: new Set(["code"]) }).runner, wsl), select: async () => [], sections: ["editors"] as never };
+  const report = await restoreBackup(backup, ctx);
+  assert.ok(!existsSync(path.join(wsl.appData, "Code", "User", "settings.json")));
+  assert.ok(report.notes.some((n) => n.includes("runs on Windows")));
+  assert.equal(fileTargets(backup, wsl).length, 0, "compare doesn't promise to create them either");
 });
 
 // ── apt ─────────────────────────────────────────────────────
