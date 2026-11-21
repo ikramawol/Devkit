@@ -4,6 +4,7 @@ import type { Runner } from "../utils/run.js";
 import type { PlatformInfo } from "./platform.js";
 import { validateRecipe, type LoadedRecipe, type Recipe } from "./stack.js";
 import { validateManifest, type Manifest } from "../manifest/manifest.js";
+import { parseJson } from "../utils/json.js";
 
 /**
  * Team-shared setups: a Git repository with
@@ -75,7 +76,7 @@ function readRepoFile(file: string): string | null {
 }
 
 function parse(text: string, where: string): unknown {
-  try { return JSON.parse(text); } catch { throw new Error(`${where} isn't valid JSON.`); }
+  try { return parseJson(text); } catch { throw new Error(`${where} isn't valid JSON.`); }
 }
 
 /** Read a team folder (a clone, or the folder `dkit team init` made). Throws if it isn't a team repo. */

@@ -6,6 +6,7 @@ import { registerEnv } from "./commands/env.js";
 import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
 import { registerMigrate } from "./commands/migrate.js";
+import { registerSnapshot } from "./commands/snapshot.js";
 import { registerStack } from "./commands/stack.js";
 import { registerTeam } from "./commands/team.js";
 
@@ -24,6 +25,7 @@ registerStack(program);
 registerEnv(program);
 registerMigrate(program);
 registerTeam(program);
+registerSnapshot(program);
 
 program.parseAsync().catch((err: unknown) => {
   // Ctrl+C inside a checklist

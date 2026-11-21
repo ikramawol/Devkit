@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { Backup } from "./bundle.js";
 import { validateBackup } from "./restore.js";
+import { parseJson } from "../utils/json.js";
 
 /**
  * A .dkit backup file:
@@ -103,7 +104,7 @@ export async function unpackBackup(buf: Buffer, getPassword: () => Promise<strin
     // dkit 0.2 and older wrote plain JSON.
     let data: unknown;
     try {
-      data = JSON.parse(buf.toString("utf8"));
+      data = parseJson(buf.toString("utf8"));
     } catch (e) {
       throw new Error("This isn't a dkit backup file.", { cause: e });
     }

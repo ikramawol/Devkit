@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Runner } from "../utils/run.js";
 import { isWindowsSidePath, type PlatformInfo } from "../core/platform.js";
 import { redactJson, redactShell } from "../migrate/bundle.js";
+import { parseJson } from "../utils/json.js";
 
 /**
  * Small readers that look at this machine without changing it.
@@ -118,7 +119,7 @@ export interface SecretRef {
 const SHELL_LABEL: Record<ShellKind, string> = { powershell: "PowerShell profile", bash: ".bashrc", zsh: ".zshrc" };
 
 function readJson(file: string): unknown {
-  try { return JSON.parse(readFileSync(file, "utf8")); } catch { return undefined; }
+  try { return parseJson(readFileSync(file, "utf8")); } catch { return undefined; }
 }
 
 /** Names of the secrets set in shell profiles and Claude Code config, found with the same rules export uses to remove them. */

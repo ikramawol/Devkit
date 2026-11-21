@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { CatalogItem } from "./catalog.js";
 import type { ToolStatus } from "./detect.js";
+import { parseJson } from "../utils/json.js";
 
 export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
@@ -43,7 +44,7 @@ export function readProject(dir: string, opts: ProjectDeps & { pm?: PackageManag
 
   let pkg: { name?: string; packageManager?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   try {
-    pkg = JSON.parse(read(pkgPath));
+    pkg = parseJson(read(pkgPath)) as typeof pkg;
   } catch {
     throw new Error(`${pkgPath} isn't valid JSON. Fix it first, then run dkit again.`);
   }

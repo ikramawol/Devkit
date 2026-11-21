@@ -12,6 +12,7 @@ import {
   EXTENSION_ID, NPM_NAME, findSecretRefs, isSafeGitSetting, listExtensions, listNpmGlobals, readGitConfig,
   shareableGit, shellProfiles, type SecretRef, type ShellKind,
 } from "./discover.js";
+import { parseJson } from "../utils/json.js";
 
 /**
  * A portable description of a developer setup: what you want, not how one OS installs it.
@@ -167,7 +168,7 @@ export async function loadManifest(file: string, askPassword: () => Promise<stri
   }
   let data: unknown;
   try {
-    data = JSON.parse(buf.toString("utf8"));
+    data = parseJson(buf.toString("utf8"));
   } catch (e) {
     throw new Error(`Can't read ${file}: it isn't valid JSON`, { cause: e });
   }

@@ -10,6 +10,7 @@ import type { PlatformInfo } from "./platform.js";
 import { PACKAGE_MANAGERS, pmRequires, readProject, type PackageManager } from "./project.js";
 import { checkNewProjectDir, describeSteps, getStarter, runStarter, starterRequires, STARTERS } from "./starters.js";
 import { findTeam, listTeams, teamsDir } from "./team.js";
+import { parseJson } from "../utils/json.js";
 
 /**
  * A stack recipe: a reusable combination of catalog resources, plus an optional starter
@@ -140,7 +141,7 @@ export function listRecipes(platform: PlatformInfo): { recipes: LoadedRecipe[]; 
     for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
       const p = path.join(dir, f);
       try {
-        const r = validateRecipe(JSON.parse(readFileSync(p, "utf8")), p);
+        const r = validateRecipe(parseJson(readFileSync(p, "utf8")), p);
         if (!recipes.some((x) => x.id === r.id)) recipes.push({ ...r, source: "saved", path: p });
       } catch (e) {
         problems.push(e instanceof Error ? e.message : String(e));
@@ -170,7 +171,7 @@ export function findRecipe(ref: string, platform: PlatformInfo): LoadedRecipe {
     const p = path.resolve(ref);
     if (!existsSync(p)) throw new Error(`Recipe file not found: ${p}`);
     let data: unknown;
-    try { data = JSON.parse(readFileSync(p, "utf8")); } catch { throw new Error(`${p} isn't valid JSON.`); }
+    try { data = parseJson(readFileSync(p, "utf8")); } catch { throw new Error(`${p} isn't valid JSON.`); }
     return { ...validateRecipe(data, p), source: "file", path: p };
   }
   const matches = listRecipes(platform).recipes.filter((r) => r.id === ref.toLowerCase());
