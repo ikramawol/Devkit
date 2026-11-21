@@ -179,7 +179,7 @@ test("fix: project libraries from the manifest are added to the project here", a
 
 // ── Backups carry the manifest ──────────────────────────────
 
-test("a migrate backup includes the manifest, and status can read it", () => {
+test("a migrate backup includes the manifest, and status can read it", async () => {
   const { platform, runner } = devPc();
   const backup = createBackup({ runner, platform, log: silentLogger, exists: () => false });
   assert.deepEqual(backup.tools, ["git", "node", "vscode"]);
@@ -189,9 +189,6 @@ test("a migrate backup includes the manifest, and status can read it", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "dkit-bk-"));
   const file = path.join(dir, "backup.json");
   writeFileSync(file, JSON.stringify(backup));
-  assert.deepEqual(loadManifest(file).tools.map((t) => t.id), backup.tools);
-
-  writeFileSync(file, JSON.stringify({ ...backup, manifest: undefined }));
-  assert.throws(() => loadManifest(file), /older dkit with no manifest/);
-  assert.throws(() => loadManifest(path.join(dir, "nope.json")), /no such file/);
+  assert.deepEqual((await loadManifest(file)).tools.map((t) => t.id), backup.tools);
+  await assert.rejects(loadManifest(path.join(dir, "nope.json")), /no such file/);
 });

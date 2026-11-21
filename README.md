@@ -163,7 +163,7 @@ dkit scan -o dkit-manifest.json        # save it
 dkit status dkit-manifest.json         # compare this PC with it, then offer to install what's missing
 dkit status dkit-manifest.json --dry-run
 dkit status dkit-manifest.json --check # only report; exit code 1 if anything differs (CI, scripts)
-dkit status dkit-backup-....json       # a migrate backup works too
+dkit status dkit-backup-....dkit       # a migrate backup works too
 ```
 
 `dkit status` shows each item as `✓` (matches), `✗` (missing), `↓` (older than the manifest), `≠` (set differently) or `?` (not known to this dkit version). Then it:
@@ -186,16 +186,27 @@ Run `dkit scan` inside a project to also record its package manager and librarie
 On the old machine:
 
 ```powershell
-dkit migrate export              # writes dkit-backup-<pc>-<date>.json
+dkit migrate export              # asks for a password, writes dkit-backup-<pc>-<date>.dkit
+dkit migrate export -o E:\       # straight to a USB drive
 ```
 
 Copy the file to the new machine, then:
 
 ```powershell
-dkit migrate restore dkit-backup-....json --dry-run   # see every change first
-dkit migrate restore dkit-backup-....json             # pick sections, then apply
-dkit migrate restore backup.json --only editors,git     # just some sections
+dkit migrate inspect dkit-backup-....dkit             # what's inside, and is it intact (changes nothing)
+dkit migrate compare dkit-backup-....dkit             # what differs on this PC: tools, extensions, settings files
+dkit migrate restore dkit-backup-....dkit --dry-run   # see every change first
+dkit migrate restore dkit-backup-....dkit             # pick sections, then apply
+dkit migrate restore backup.dkit --only editors,git   # just some sections
 ```
+
+The backup is one compressed, **encrypted** file:
+
+- **Encryption:** AES-256-GCM, with the key derived from your password by scrypt. It's built into Node, so there's nothing extra to install.
+- **The password can't be recovered.** Without it the backup can't be opened.
+- **Damage and tampering:** any change to the file is detected and the backup is refused, rather than half-restored.
+- **Scripts:** set `DKIT_BACKUP_PASSWORD` instead of typing the password. `--no-encrypt` makes an unencrypted (still compressed and checksummed) file.
+- **Old backups:** `.json` backups from dkit 0.2 still restore.
 
 What's carried over:
 
@@ -209,6 +220,15 @@ What's carried over:
 | `npm` | Global npm packages |
 | `ssh` | `~/.ssh/config` (never keys) |
 | `shell` | PowerShell profile, or .bashrc/.zshrc (only restored on a matching OS) |
+
+Moving between Windows, macOS and Linux:
+
+- **Tools:** reinstalled with the new OS's installer (winget ↔ Homebrew ↔ apt). Tools with no installer there are listed for you to install.
+- **Shell profile:** a PowerShell profile can't run on macOS or Linux, and a .bashrc/.zshrc can't run on Windows. dkit converts environment variables and simple aliases into `~/.dkit/converted/profile.sh` (or `profile.ps1`), and tells you the one line to add to your own profile to load it. Anything more complex is left out and counted, not guessed.
+- **Git:** `core.autocrlf` becomes the new OS's usual setting (`true` on Windows, `input` elsewhere). Windows-only editors like Notepad++ aren't set on macOS or Linux.
+- **MCP servers and settings that point at the old OS's folders** (like `C:\Tools\mcp.exe`) are listed for you instead of being applied.
+
+On Linux, apt installs use `sudo`, or run directly when you're root (in containers, for example). Inside WSL, Windows programs on the PATH (`/mnt/c/...`) don't count as Linux tools, except VS Code and Antigravity, which you use from Windows.
 
 Safety rules:
 
@@ -239,7 +259,8 @@ src/
   core/stack.ts         stack recipes: built-ins, validation, save/load, install
   adapters/methods.ts   winget, brew, apt, npm, scripts
   manifest/             scan this machine, the manifest format, compare and fix (dkit scan / status)
-  migrate/              backup format, export, restore
+  migrate/              backup format, encrypted .dkit archive, export, inspect/compare, restore,
+                        transform.ts: translating settings between OSes
   utils/                safe command runner, prompts, logger
 ```
 

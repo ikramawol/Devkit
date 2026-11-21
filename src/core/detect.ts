@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Runner } from "../utils/run.js";
-import type { PlatformInfo } from "./platform.js";
+import { isWindowsSidePath, type PlatformInfo } from "./platform.js";
 import type { CatalogItem } from "./catalog.js";
 
 export interface ToolStatus {
@@ -35,11 +35,14 @@ export function detectItem(item: CatalogItem, deps: DetectDeps): ToolStatus {
   const { runner, platform } = deps;
   const exists = deps.exists ?? existsSync;
   const base = { id: item.id, name: item.name };
-  const { command, versionArgs, paths, commandOn } = item.detect;
+  const { versionArgs, paths, commandOn, commandFor, windowsSideInWsl } = item.detect;
+  const command = commandFor?.[platform.os] ?? item.detect.command;
 
   // 1. A working command on PATH.
   if (command && (!commandOn || commandOn.includes(platform.os))) {
-    const resolved = runner.which(command);
+    let resolved = runner.which(command);
+    // In WSL, /mnt/c/... is the Windows copy (e.g. Windows npm), which can't run as a Linux tool.
+    if (resolved && platform.wsl && isWindowsSidePath(resolved) && !windowsSideInWsl) resolved = null;
     if (resolved) {
       const r = runner.run(resolved, versionArgs ?? ["--version"]);
       // Some tools (ssh -V) print their version to stderr.

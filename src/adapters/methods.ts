@@ -13,6 +13,10 @@ const WINGET_OK = new Set([0, 3010, -1978335189, 0x8a15002b, -1978335135, 0x8a15
 
 let aptUpdated = false;
 
+/** Running as root (Linux/macOS)? Replaceable in tests. */
+export let isRoot = () => process.getuid?.() === 0;
+export function setIsRoot(fn: () => boolean) { isRoot = fn; }
+
 /** Human-readable form of what a method will do, for plans and --dry-run. */
 export function describeMethod(m: Method): string {
   switch (m.type) {
@@ -52,11 +56,16 @@ export function runMethod(m: Method, runner: Runner): MethodResult {
     }
     case "apt": {
       if (!runner.which("apt-get")) return { ok: false, manual: true, message: "apt-get not found; install with your distro's package manager" };
+      // As root (containers, fresh servers) there's often no sudo, and none is needed.
+      const root = isRoot();
+      if (!root && !runner.which("sudo"))
+        return { ok: false, manual: true, message: `needs admin rights: run as root, or install sudo (then: sudo apt-get install ${m.packages.join(" ")})` };
+      const apt = (args: string[]) => (root ? runner.run("apt-get", args, live) : runner.run("sudo", ["apt-get", ...args], live));
       if (!aptUpdated) {
-        runner.run("sudo", ["apt-get", "update"], live);
+        apt(["update"]);
         aptUpdated = true;
       }
-      const r = runner.run("sudo", ["apt-get", "install", "-y", ...m.packages], live);
+      const r = apt(["install", "-y", ...m.packages]);
       return r.ok ? { ok: true } : { ok: false, message: r.error ?? `apt-get exited with ${r.code}` };
     }
     case "npm": {

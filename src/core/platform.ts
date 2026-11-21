@@ -12,7 +12,12 @@ export interface PlatformInfo {
   appData: string;
   /** Where the official Claude Code native installer puts the binary. */
   claudeBinDir: string;
+  /** Linux running inside WSL on a Windows PC. */
+  wsl?: boolean;
 }
+
+/** A Windows program seen from inside WSL (/mnt/c/...): it isn't a Linux tool. */
+export const isWindowsSidePath = (p: string) => /^\/mnt\/[a-z]\//i.test(p);
 
 export function detectPlatform(): PlatformInfo {
   const p = process.platform;
@@ -31,6 +36,7 @@ export function detectPlatform(): PlatformInfo {
     home,
     appData,
     claudeBinDir: path.join(home, ".local", "bin"),
+    wsl: osName === "linux" && (!!process.env.WSL_DISTRO_NAME || /microsoft/i.test(os.release())),
   };
 }
 

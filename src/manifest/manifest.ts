@@ -5,6 +5,9 @@ import { detectItem, type DetectDeps } from "../core/detect.js";
 import { PACKAGE_MANAGERS, detectInProject, type PackageManager, type ProjectInfo } from "../core/project.js";
 import { EDITORS } from "../migrate/editors.js";
 import { REDACTED } from "../migrate/bundle.js";
+import { backupFileInfo, unpackBackup } from "../migrate/archive.js";
+import { manifestOf } from "../migrate/compare.js";
+import { validateBackup } from "../migrate/restore.js";
 import {
   EXTENSION_ID, NPM_NAME, findSecretRefs, isSafeGitSetting, listExtensions, listNpmGlobals, readGitConfig,
   shareableGit, shellProfiles, type SecretRef, type ShellKind,
@@ -63,7 +66,7 @@ export function scanEnvironment(deps: ScanDeps): Manifest {
   }
 
   const npmTools = catalogNpmPackages();
-  const npmGlobals = (listNpmGlobals(runner) ?? []).filter((n) => !npmTools.has(n));
+  const npmGlobals = (listNpmGlobals(runner, platform) ?? []).filter((n) => !npmTools.has(n));
 
   const manifest: Manifest = {
     format: "dkit-manifest",
@@ -145,18 +148,30 @@ export function validateManifest(data: unknown, label = "manifest"): Manifest {
   return m;
 }
 
-/** Read a manifest file, or the manifest inside a `dkit migrate export` backup. */
-export function loadManifest(file: string): Manifest {
+/**
+ * Read a manifest file, or the manifest inside a `dkit migrate export` backup
+ * (.dkit, asking for the password if it's encrypted, or an old plain .json backup).
+ */
+export async function loadManifest(file: string, askPassword: () => Promise<string> = async () => {
+  throw new Error("This backup is encrypted and needs a password.");
+}): Promise<Manifest> {
+  let buf: Buffer;
+  try {
+    buf = readFileSync(file);
+  } catch (e) {
+    throw new Error(`Can't read ${file}: no such file. Make one with \`dkit scan -o dkit-manifest.json\``, { cause: e });
+  }
+  if (backupFileInfo(buf).kind === "dkit") {
+    const backup = await unpackBackup(buf, askPassword);
+    return validateManifest(manifestOf(backup), file);
+  }
   let data: unknown;
   try {
-    data = JSON.parse(readFileSync(file, "utf8"));
+    data = JSON.parse(buf.toString("utf8"));
   } catch (e) {
-    throw new Error(`Can't read ${file}: ${(e as NodeJS.ErrnoException).code === "ENOENT" ? "no such file. Make one with `dkit scan -o dkit-manifest.json`" : "it isn't valid JSON"}`, { cause: e });
+    throw new Error(`Can't read ${file}: it isn't valid JSON`, { cause: e });
   }
-  if (isObj(data) && data.format === "dkit-backup") {
-    if (!data.manifest) throw new Error(`${file} is a backup from an older dkit with no manifest inside. Export it again, or use \`dkit migrate restore\`.`);
-    return validateManifest(data.manifest, file);
-  }
+  if (isObj(data) && data.format === "dkit-backup") return validateManifest(manifestOf(validateBackup(data)), file);
   return validateManifest(data, file);
 }
 
@@ -236,7 +251,7 @@ export function compareSettings(m: Manifest, deps: DetectDeps): Pick<Comparison,
     });
   }
 
-  const npmHave = listNpmGlobals(runner);
+  const npmHave = listNpmGlobals(runner, deps.platform);
   const npm = {
     checked: npmHave !== null,
     total: m.npmGlobals.length,

@@ -8,9 +8,10 @@ import { runMethod } from "../adapters/methods.js";
 import type { Select } from "../utils/prompt.js";
 import { c } from "../utils/logger.js";
 import { EDITORS } from "./editors.js";
-import { NPM_NAME } from "../manifest/discover.js";
+import { NPM_NAME, listNpmGlobals, readGitConfig } from "../manifest/discover.js";
+import { convertProfile, convertedProfileTarget, transformGit } from "./transform.js";
 import {
-  type Backup, type BundledFile, REDACTED, foreignPaths, unbundle, writeWithBackup,
+  type Backup, type BundledFile, REDACTED, bundleFile, foreignPaths, unbundle, writeWithBackup,
 } from "./bundle.js";
 
 export const SECTIONS = ["tools", "apps", "editors", "git", "claude", "npm", "ssh", "shell"] as const;
@@ -147,12 +148,23 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
     } else {
       const grouped = new Map<string, string[]>();
       for (const [k, v] of b.git.config) grouped.set(k, [...(grouped.get(k) ?? []), v]);
-      for (const [key, values] of grouped) {
+      // What's already set here, so identical settings are left alone (and not listed as changes).
+      const current = new Map<string, string[]>();
+      for (const [k, v] of readGitConfig(runner) ?? []) current.set(k.toLowerCase(), [...(current.get(k.toLowerCase()) ?? []), v]);
+      let applied = 0;
+      for (const [key, original] of grouped) {
+        // Settings that mean something else on this OS (line endings, Windows-only editors).
+        const t = transformGit(key, original, b.source.os, platform.os);
+        if (t.note) report.notes.push(t.note);
+        if (!t.values) continue;
+        const values = t.values;
+        if (current.get(key.toLowerCase())?.join("\n") === values.join("\n")) continue;
         const odd = values.flatMap((v) => foreignPaths(v, platform.os));
         if (crossOs && odd.length) {
           report.notes.push(`Git ${key} = ${values[0]} points to your old machine; set it again for this one.`);
           continue;
         }
+        applied++;
         if (dryRun) { log.info(`  ${c.dim("would set")} ${key} = ${values.join(", ")}`); continue; }
         if (values.length === 1) runner.run("git", ["config", "--global", key, values[0]]);
         else {
@@ -165,7 +177,8 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
         write(target, b.git.excludesFile, "global gitignore");
         if (!dryRun) runner.run("git", ["config", "--global", "core.excludesfile", target.split(path.sep).join("/")]);
       }
-      if (!dryRun) log.ok(`${grouped.size} Git settings applied`);
+      if (!applied) log.ok("Git settings already match");
+      else if (!dryRun) log.ok(`${applied} Git setting(s) applied`);
     }
   }
 
@@ -185,6 +198,12 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
           report.notes.push(`MCP server "${name}" needs its secrets. Add it with: claude mcp add-json ${name} '<json>' --scope user`);
           continue;
         }
+        // Unescape JSON's \\ so paths read as you'd type them (C:\Tools\mcp.exe).
+        const odd = crossOs ? foreignPaths(json.replace(/\\\\/g, "\\"), platform.os) : [];
+        if (odd.length) {
+          report.notes.push(`MCP server "${name}" runs a program from your old ${b.source.os} machine (${odd.join(", ")}), so it wasn't added. Add it again for ${platform.os} with \`claude mcp add\`.`);
+          continue;
+        }
         if (!claude) { report.notes.push(`MCP server "${name}" not added: Claude Code isn't installed.`); continue; }
         if (dryRun) { log.info(`  ${c.dim("would add MCP server")} ${name}`); continue; }
         try {
@@ -202,11 +221,9 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
   if (want("npm")) {
     log.info(c.bold("\nGlobal npm packages"));
     runner.refreshPath();
-    if (!runner.which("npm")) report.notes.push("npm is not installed, so global npm packages were skipped.");
+    const have = listNpmGlobals(runner, platform);
+    if (!have) report.notes.push("npm is not installed, so global npm packages were skipped.");
     else {
-      const r = runner.run("npm", ["ls", "-g", "--depth=0", "--json"]);
-      let have: string[] = [];
-      try { have = Object.keys(JSON.parse(r.stdout).dependencies ?? {}); } catch { /* none */ }
       const missing = b.npmGlobals.filter((n) => NPM_NAME.test(n) && !have.includes(n));
       if (!missing.length) log.ok("all present");
       else if (dryRun) log.info(`  ${c.dim("would run")} npm install -g ${missing.join(" ")}`);
@@ -226,12 +243,28 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
   // ── Shell profile ────────────────────────────────────────
   if (want("shell")) {
     log.info(c.bold("\nShell profile"));
-    for (const s of b.shell) {
-      const fits = platform.os === "windows" ? s.kind === "powershell" : s.kind !== "powershell";
-      if (!fits) {
-        report.notes.push(`Your ${s.kind} profile (${s.file.path}) doesn't run on ${platform.os}. It's in the backup file if you want to translate it.`);
-        continue;
+    const fitsHere = (k: string) => (platform.os === "windows" ? k === "powershell" : k !== "powershell");
+
+    // Profiles for another OS's shell: convert what can be converted into one file next to your own profile.
+    const foreign = b.shell.filter((s) => !fitsHere(s.kind));
+    if (foreign.length) {
+      const parts = foreign.map((s) => convertProfile(unbundle(s.file).toString("utf8"), s.kind, s.file.path));
+      const converted = parts.reduce((n, p) => n + p.converted, 0);
+      const kinds = [...new Set(foreign.map((s) => s.kind))].join(" and ");
+      if (!converted) {
+        report.notes.push(`Your ${kinds} profile doesn't run on ${platform.os}, and had nothing dkit could convert. It's in the backup if you want to translate it by hand.`);
+      } else {
+        const { file, howToLoad } = convertedProfileTarget(platform.home, platform.os, path.join);
+        const text = parts.map((p) => p.text).join("\n");
+        write(file, bundleFile("profile", Buffer.from(text, "utf8")), "converted shell profile");
+        const left = parts.reduce((n, p) => n + p.skipped, 0);
+        report.notes.push(`Your ${kinds} profile doesn't run on ${platform.os}: dkit converted ${converted} environment variable(s)/alias(es) into ${file}${left ? ` (${left} line(s) left out)` : ""}. To use it, ${howToLoad}`);
+        if (text.includes(REDACTED)) report.notes.push(`${file} has secrets shown as ${REDACTED}: fill them in.`);
       }
+    }
+
+    for (const s of b.shell) {
+      if (!fitsHere(s.kind)) continue;
       const target = path.join(platform.home, ...s.file.path.split("/"));
       write(target, s.file, `${s.kind} profile`);
       if (unbundle(s.file).toString("utf8").includes(REDACTED))

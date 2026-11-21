@@ -23,6 +23,13 @@ export interface Detect {
   versionArgs?: string[];
   /** Only trust `command` on these OSes (default: all). On Windows, `bash` is WSL's launcher, not Git Bash. */
   commandOn?: OS[];
+  /** A different command name on some OSes (Python is `python3` on macOS and Linux). */
+  commandFor?: Partial<Record<OS, string>>;
+  /**
+   * Inside WSL, Windows programs are on PATH too (/mnt/c/...). They don't count as Linux tools,
+   * except editors like VS Code, which are meant to be used from Windows (`code .` opens WSL folders).
+   */
+  windowsSideInWsl?: boolean;
   /** Fallback for GUI apps with no CLI: well-known install paths (env vars allowed). */
   paths?: Partial<Record<OS, string[]>>;
 }
@@ -156,7 +163,7 @@ export const CATALOG: CatalogItem[] = [
     description: "Python 3 with pip, for scripts, data work and Python web frameworks.",
     category: "Languages",
     // On Windows, `python` can be a Microsoft Store stub that fails --version; that counts as missing.
-    detect: { command: "python", versionArgs: ["--version"] },
+    detect: { command: "python", commandFor: { macos: "python3", linux: "python3" }, versionArgs: ["--version"] },
     install: {
       windows: { type: "winget", id: "Python.Python.3.13" },
       macos: { type: "brew", formula: "python" },
@@ -213,6 +220,7 @@ export const CATALOG: CatalogItem[] = [
     detect: {
       command: "code",
       versionArgs: ["--version"],
+      windowsSideInWsl: true,
       paths: { windows: ["%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe", "%ProgramFiles%\\Microsoft VS Code\\Code.exe"], macos: ["/Applications/Visual Studio Code.app"] },
     },
     install: {
@@ -230,6 +238,7 @@ export const CATALOG: CatalogItem[] = [
     category: "Editors & AI",
     detect: {
       command: "antigravity",
+      windowsSideInWsl: true,
       versionArgs: ["--version"],
       paths: { windows: ["%LOCALAPPDATA%\\Programs\\Antigravity\\Antigravity.exe"], macos: ["/Applications/Antigravity.app"] },
     },
@@ -346,7 +355,10 @@ export const CATALOG: CatalogItem[] = [
         { type: "wsl" },
       ],
     },
-    notes: ["Open Docker Desktop once to finish setup. If `docker` says permission denied, sign out and back in."],
+    notes: [
+      "Open Docker Desktop once to finish setup. If `docker` says permission denied, sign out and back in.",
+      "On Linux, let yourself use it without sudo: sudo usermod -aG docker $USER (then sign out and back in).",
+    ],
   },
   {
     id: "postman",

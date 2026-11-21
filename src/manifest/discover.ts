@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Runner } from "../utils/run.js";
-import type { PlatformInfo } from "../core/platform.js";
+import { isWindowsSidePath, type PlatformInfo } from "../core/platform.js";
 import { redactJson, redactShell } from "../migrate/bundle.js";
 
 /**
@@ -20,14 +20,18 @@ export function listExtensions(runner: Runner, cli: string): string[] | null {
     .split(/\r?\n/).map((s) => s.trim()).filter((s) => EXTENSION_ID.test(s));
 }
 
-/** Names of global npm packages (minus npm itself and corepack), or null if npm can't tell. */
-export function listNpmGlobals(runner: Runner): string[] | null {
-  if (!runner.which("npm")) return null;
+/**
+ * Names of global npm packages (minus npm itself and corepack), or null if there is no usable npm.
+ * In WSL, Windows' npm (/mnt/c/...) lists Windows packages, so it doesn't count.
+ */
+export function listNpmGlobals(runner: Runner, platform?: PlatformInfo): string[] | null {
+  const npm = runner.which("npm");
+  if (!npm || (platform?.wsl && isWindowsSidePath(npm))) return null;
   const r = runner.run("npm", ["ls", "-g", "--depth=0", "--json"]);
   try {
     return Object.keys(JSON.parse(r.stdout).dependencies ?? {}).filter((n) => !["npm", "corepack"].includes(n));
   } catch {
-    return null;
+    return []; // npm is there but printed nothing readable: treat it as no packages
   }
 }
 
