@@ -62,7 +62,7 @@ export function detectItem(item: CatalogItem, deps: DetectDeps): ToolStatus {
   if (platform.os === "windows" && method?.type === "winget" && runner.which("winget")) {
     const all = wingetInstalled(runner);
     if (all) {
-      if (all.has(method.id.toLowerCase())) return { ...base, installed: true, where: "winget" };
+      if ([method.id, ...(method.also ?? [])].some((id) => all.has(id.toLowerCase()))) return { ...base, installed: true, where: "winget" };
     } else {
       // The one-shot export failed: fall back to asking about this package alone (slower).
       const r = runner.run("winget", ["list", "--id", method.id, "--exact", "--accept-source-agreements", "--disable-interactivity"]);

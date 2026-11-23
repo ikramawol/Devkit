@@ -36,11 +36,20 @@ test("support level is worked out from the catalog entry", () => {
   assert.equal(levelLabel(0), "Level 0 · Not supported");
 });
 
-test("nothing claims to configure or maintain yet", () => {
+test("maintain is claimed only where dkit update and dkit uninstall both work", () => {
+  assert.equal(maturityOf(getItem("git")!, "windows").has.maintain, true, "winget");
+  assert.equal(maturityOf(getItem("prettier")!, "linux").has.maintain, true, "npm");
+  assert.equal(maturityOf(getItem("claude")!, "macos").has.maintain, false, "script installs can't be uninstalled for you");
+  assert.equal(maturityOf(getItem("git-bash")!, "windows").has.maintain, false, "comes with Git");
+  assert.equal(maturityOf(getItem("python")!, "linux").has.maintain, false, "Linux needs its Python");
+  assert.equal(maturityOf(getItem("python")!, "windows").has.maintain, true);
+  assert.equal(maturityOf(getItem("hono")!, "windows").has.maintain, false, "libraries: use the package manager");
+});
+
+test("nothing claims to configure yet", () => {
   for (const item of CATALOG) {
     const m = maturityOf(item, "windows");
     assert.equal(m.has.configure, false, item.id);
-    assert.equal(m.has.maintain, false, item.id);
     assert.ok(m.level <= 2, `${item.id} can't be above level 2 without configure`);
   }
 });

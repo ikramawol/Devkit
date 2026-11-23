@@ -73,6 +73,7 @@ export function registerInfo(program: Command) {
         if (l.key === "install" && method) detail = describeMethod(method);
         if (l.key === "install" && isProject) detail = `${describePackages(item)} with the project's package manager`;
         if (l.key === "snapshot" && item.snapshot) detail = item.snapshot.join(", ");
+        if (l.key === "maintain") detail = "dkit update · dkit uninstall · checked by dkit diagnose";
         const mark = maturity.has[l.key] ? c.green("✓") : c.dim("·");
         console.log(`  ${mark} ${`${l.level} ${l.label}`.padEnd(21)} ${maturity.has[l.key] ? detail : c.dim("not supported yet")}`);
       }

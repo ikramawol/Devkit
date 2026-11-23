@@ -81,7 +81,9 @@ Not every tool is supported equally, and dkit says so. `dkit catalog` and `dkit 
 | L4 Snapshot & restore | `dkit migrate` saves and restores its settings |
 | L5 Maintain | updates, uninstalls and diagnoses it |
 
-Today every tool is at L2 on Windows. `+S` marks tools whose settings already move with `dkit migrate` (VS Code, Antigravity, Git, Claude Code, Node's global packages, SSH config).
+Today every tool is at L2 on Windows, because nothing configures tools yet (L3). Two marks show what else works:
+- `+S`: its settings move with `dkit migrate` (VS Code, Antigravity, Git, Claude Code, Node's global packages, SSH config).
+- `+M`: `dkit update` and `dkit uninstall` handle it (anything installed with winget, Homebrew, apt or npm).
 
 | Group | Tools (id) |
 |---|---|
@@ -295,6 +297,32 @@ dkit snapshot unschedule [--forget-password] # turn it off (snapshots are kept)
 - **When the job fails**, the result goes to `~/.dkit/snapshots.log`, and `dkit snapshot list` shows it.
 - **If you update Node.js or reinstall dkit**, run `dkit snapshot schedule` again so the job points at the new location.
 
+## Keep your tools healthy
+
+```
+dkit diagnose                 # updates waiting, duplicate installs, PATH mistakes (changes nothing)
+dkit diagnose --offline       # the same, without the slower update check
+dkit update                   # pick from the tools that have updates
+dkit update git node          # update these
+dkit update --all --dry-run   # see what would be updated
+dkit uninstall postman        # remove a tool (asks first; --dry-run to preview)
+```
+
+**What `dkit diagnose` looks for:**
+- **Updates** that winget, Homebrew, apt or npm know about. apt answers from its last `sudo apt update`.
+- **Two copies of a tool** on PATH, and which one runs. On Windows it also catches `python` opening the Microsoft Store instead of your Python.
+- **Tools that are installed but not on PATH**, so terminals can't find them. This includes npm's global folder.
+- **PATH folders that no longer exist, or are listed twice.** On Windows it checks the saved PATH that new terminals get, not the extra folders your current shell adds.
+
+It never changes anything. It prints what to do, and exits with code 1 if it found a problem.
+
+**How `dkit update` and `dkit uninstall` stay safe:**
+- **They use the installer the tool came from.** That's winget, Homebrew, apt or npm. Claude Code updates with `claude update`, or with npm if you installed it from npm. Something you installed another way is left alone, with a note on how to handle it yourself.
+- **Uninstall removes only the program.** Settings, projects and databases' data stay. On Linux, apt shows what it will remove and asks you itself.
+- **Uninstall warns about tools that would stop working**, for example Prettier without Node.js. It removes tools in a safe order.
+- **Some tools are never removed.** These are OpenSSH, Python on Linux (the system needs it), and anything that's part of the OS. For tools installed with a script, it tells you which files to delete.
+- **Project libraries aren't touched.** Use your package manager (`npm update`, `pnpm update`).
+
 ## Development
 
 ```
@@ -305,7 +333,7 @@ npm test                  # tests run on a fake machine; nothing is really insta
 ```
 src/
   index.ts              CLI entry
-  commands/             doctor, info, install, stack, scan/status, migrate, team, snapshot
+  commands/             doctor, info, install, diagnose/update/uninstall, stack, scan/status, migrate, team, snapshot
   core/catalog.ts       every tool and library: how to find and install it on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
@@ -319,6 +347,7 @@ src/
   manifest/             scan this machine, the manifest format, compare and fix (dkit scan / status)
   migrate/              backup format, encrypted .dkit archive, export, inspect/compare, restore,
                         transform.ts: translating settings between OSes
+  maintain/             update checks, update/uninstall plans (maintain.ts), PATH and duplicate checks (diagnose.ts)
   snapshot/             scheduled snapshots: taking and pruning them, OS schedulers (Task Scheduler, launchd, cron)
   utils/                safe command runner, prompts, logger, secret-store.ts (DPAPI / Keychain / keyring)
 ```

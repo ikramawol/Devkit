@@ -1,9 +1,10 @@
-import type { OS } from "./platform.js";
+import type { OS, PlatformInfo } from "./platform.js";
 import type { Prereq } from "./prereqs.js";
 
 /** How to install one tool on one OS. */
 export type Method =
-  | { type: "winget"; id: string }
+  /** `also`: other winget ids that are the same tool (Node.js installed as OpenJS.NodeJS.24 instead of .LTS). */
+  | { type: "winget"; id: string; also?: string[] }
   | { type: "brew"; formula?: string; cask?: string; tap?: string }
   | { type: "apt"; packages: string[] }
   | { type: "npm"; pkg: string }
@@ -74,6 +75,19 @@ export interface CatalogItem {
   prereqs?: Partial<Record<OS, Prereq[]>>;
   /** Shown after install: logins, restarts, passwords. */
   notes?: string[];
+  /** An npm package some people install it with instead (older Claude Code installs). dkit then updates and removes it with npm. */
+  npmAlt?: string;
+  /** For script installs: the tool's own update command, e.g. ["claude", "update"]. Fixed, never from user input. */
+  selfUpdate?: string[];
+  /** For script installs: how to remove it by hand (dkit doesn't delete files for you). */
+  removeManually?: Partial<Record<OS, string>>;
+  /** Why dkit refuses to uninstall it on this OS (the system itself needs it). */
+  keepOn?: Partial<Record<OS, string>>;
+}
+
+/** The installer dkit uses for this tool here. In WSL some tools come from Windows instead (Docker Desktop). */
+export function methodFor(item: CatalogItem, platform: PlatformInfo): Method | undefined {
+  return (platform.wsl && item.wslInstall) || item.install[platform.os];
 }
 
 const npmGlobal = (pkg: string) => ({ windows: { type: "npm", pkg }, macos: { type: "npm", pkg }, linux: { type: "npm", pkg } }) as const;
@@ -126,6 +140,10 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "builtin" },
       linux: { type: "apt", packages: ["openssh-client"] },
     },
+    keepOn: {
+      windows: "It's part of Windows: remove it in Settings → System → Optional features if you really want to.",
+      linux: "Git, servers and many other tools need the SSH client, so dkit won't remove it.",
+    },
     notes: ["SSH keys are never copied automatically. Create new ones (ssh-keygen -t ed25519) or copy them yourself."],
   },
   {
@@ -153,7 +171,7 @@ export const CATALOG: CatalogItem[] = [
     category: "Languages",
     detect: { command: "node", versionArgs: ["--version"] },
     install: {
-      windows: { type: "winget", id: "OpenJS.NodeJS.LTS" },
+      windows: { type: "winget", id: "OpenJS.NodeJS.LTS", also: ["OpenJS.NodeJS", "OpenJS.NodeJS.20", "OpenJS.NodeJS.22", "OpenJS.NodeJS.24", "OpenJS.NodeJS.26"] },
       macos: { type: "brew", formula: "node" },
       linux: { type: "apt", packages: ["nodejs", "npm"] },
     },
@@ -167,10 +185,11 @@ export const CATALOG: CatalogItem[] = [
     // On Windows, `python` can be a Microsoft Store stub that fails --version; that counts as missing.
     detect: { command: "python", commandFor: { macos: "python3", linux: "python3" }, versionArgs: ["--version"] },
     install: {
-      windows: { type: "winget", id: "Python.Python.3.13" },
+      windows: { type: "winget", id: "Python.Python.3.13", also: ["Python.Python.3.11", "Python.Python.3.12", "Python.Python.3.14", "Python.Python.3.15"] },
       macos: { type: "brew", formula: "python" },
       linux: { type: "apt", packages: ["python3", "python3-pip", "python3-venv"] },
     },
+    keepOn: { linux: "Linux itself runs on Python 3 (removing it can break the desktop and apt), so dkit won't remove it." },
   },
   {
     id: "pnpm",
@@ -208,6 +227,8 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "brew", tap: "oven-sh/bun", formula: "bun" },
       linux: { type: "script", shell: "bash", script: "curl -fsSL https://bun.sh/install | bash" },
     },
+    selfUpdate: ["bun", "upgrade"],
+    removeManually: { linux: "Delete the ~/.bun folder, then remove the Bun lines (BUN_INSTALL, PATH) from ~/.bashrc." },
     notes: ["Open a new terminal so `bun` is on your PATH."],
   },
 
@@ -265,6 +286,13 @@ export const CATALOG: CatalogItem[] = [
       linux: { type: "script", shell: "bash", script: "curl -fsSL https://claude.ai/install.sh | bash" },
     },
     requires: { windows: ["git"] }, // Claude Code on Windows runs on Git Bash
+    selfUpdate: ["claude", "update"],
+    npmAlt: "@anthropic-ai/claude-code",
+    removeManually: {
+      windows: "Delete %USERPROFILE%\\.local\\bin\\claude.exe and the %USERPROFILE%\\.local\\share\\claude folder. Your settings in ~/.claude stay.",
+      macos: "Delete ~/.local/bin/claude and the ~/.local/share/claude folder. Your settings in ~/.claude stay.",
+      linux: "Delete ~/.local/bin/claude and the ~/.local/share/claude folder. Your settings in ~/.claude stay.",
+    },
     notes: ["Open a new terminal, run `claude` and sign in."],
   },
   {
@@ -288,7 +316,7 @@ export const CATALOG: CatalogItem[] = [
     category: "Databases",
     detect: { command: "psql", versionArgs: ["--version"], paths: { windows: ["%ProgramFiles%\\PostgreSQL\\17\\bin\\psql.exe"] } },
     install: {
-      windows: { type: "winget", id: "PostgreSQL.PostgreSQL.17" },
+      windows: { type: "winget", id: "PostgreSQL.PostgreSQL.17", also: ["PostgreSQL.PostgreSQL.15", "PostgreSQL.PostgreSQL.16", "PostgreSQL.PostgreSQL.18"] },
       macos: { type: "brew", formula: "postgresql@17" },
       linux: { type: "apt", packages: ["postgresql"] },
     },

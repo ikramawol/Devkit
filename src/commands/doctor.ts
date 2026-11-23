@@ -89,11 +89,11 @@ export function registerDoctor(program: Command) {
           mark = r.ok ? c.green(" ✓ found") : c.red(" ✗ not found in winget");
         }
         const { level, has } = maturityOf(item, os);
-        const support = `L${level}${has.snapshot && level < 4 ? "+S" : ""}`;
+        const support = `L${level}${has.snapshot && level < 4 ? "+S" : ""}${has.maintain && level < 5 ? "+M" : ""}`;
         const how = item.kind === "project" ? `project library: ${describePackages(item)}` : m ? describeMethod(m) : "not supported on this OS";
         console.log(`${item.name.padEnd(20)} ${c.dim(item.id.padEnd(12))} ${support.padEnd(8)} ${c.dim(how)}${mark}`);
       }
-      console.log(c.dim(`\nSupport: ${LEVELS.map((l) => `L${l.level} ${l.label}`).join(" · ")}  (+S = settings move with \`dkit migrate\`)`));
+      console.log(c.dim(`\nSupport: ${LEVELS.map((l) => `L${l.level} ${l.label}`).join(" · ")}\n+S = settings move with \`dkit migrate\` · +M = \`dkit update\` and \`dkit uninstall\` handle it`));
       console.log(c.dim("Details for one tool: dkit info <id>"));
     });
 }

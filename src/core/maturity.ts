@@ -35,7 +35,8 @@ export function maturityOf(item: CatalogItem, os: OS): Maturity {
     install: projectPkgs || (!!method && method.type !== "manual"),
     configure: false, // no resource applies settings yet
     snapshot: !!item.snapshot?.length,
-    maintain: false, // no update/uninstall yet
+    // `dkit update` and `dkit uninstall` both work through this installer (scripts can't be uninstalled for you).
+    maintain: !!method && ["winget", "brew", "apt", "npm"].includes(method.type) && !item.keepOn?.[os],
   };
   let level = 0;
   for (const l of LEVELS) {

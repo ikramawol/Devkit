@@ -5,6 +5,7 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerEnv } from "./commands/env.js";
 import { registerInfo } from "./commands/info.js";
 import { registerInstall } from "./commands/install.js";
+import { registerMaintain } from "./commands/maintain.js";
 import { registerMigrate } from "./commands/migrate.js";
 import { registerSnapshot } from "./commands/snapshot.js";
 import { registerStack } from "./commands/stack.js";
@@ -21,6 +22,7 @@ const program = new Command()
 registerDoctor(program);
 registerInfo(program);
 registerInstall(program);
+registerMaintain(program);
 registerStack(program);
 registerEnv(program);
 registerMigrate(program);
