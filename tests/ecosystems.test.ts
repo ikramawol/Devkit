@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { buildPlan } from "../src/core/engine.js";
 import {
-  addCommand, detectInProject, parseGoMod, parsePubspec, parseRequirements, readProject,
+  addCommand, detectInProject, parseGoMod, parsePubspec, parseRequirements, pythonCommand, readProject, venvPython,
 } from "../src/core/project.js";
+import type { OS } from "../src/core/platform.js";
 import { findRecipe, installStack, validateRecipe } from "../src/core/stack.js";
 import { dartName } from "../src/core/starters.js";
 import { getItem } from "../src/core/catalog.js";
@@ -15,6 +16,11 @@ import type { Choice } from "../src/utils/prompt.js";
 import { engineCtx, fakeRunner, ok, tempPlatform } from "./helpers.js";
 
 const tmp = (prefix: string) => mkdtempSync(path.join(os.tmpdir(), prefix));
+/**
+ * The OS these tests run on. Tests that really create files in a .venv pretend to be this OS, so the
+ * paths dkit builds (`.venv\Scripts\python.exe` or `.venv/bin/python`) match the files the fake makes.
+ */
+const HOST_OS: OS = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux";
 const keepAll = async (_m: string, choices: Choice[]) => choices.filter((ch) => ch.checked).map((ch) => ch.value);
 
 /**
@@ -22,7 +28,7 @@ const keepAll = async (_m: string, choices: Choice[]) => choices.filter((ch) => 
  * venv makes .venv, `go mod init` writes go.mod, `go get` adds requires, `flutter create`/`pub add` edit pubspec.yaml.
  */
 function polyglotMachine() {
-  const { runner } = fakeRunner({ installed: new Set(["python", "go", "flutter", "git", "psql", "memurai", "winget"]) });
+  const { runner } = fakeRunner({ installed: new Set(["python", "python3", "go", "flutter", "git", "psql", "memurai", "redis-server", "winget"]) });
   const log: { line: string; cwd?: string }[] = [];
   const base = runner.run;
   runner.run = (cmd, args = [], o): RunResult => {
@@ -30,9 +36,10 @@ function polyglotMachine() {
     const line = `${cmd} ${args.join(" ")}`;
     if (args[0] === "--version" || args[0] === "version" || cmd === "winget") return base(cmd, args, o);
     log.push({ line, cwd });
-    if (cmd === "python" && args.join(" ") === "-m venv .venv") {
-      mkdirSync(path.join(cwd, ".venv", "Scripts"), { recursive: true });
-      writeFileSync(path.join(cwd, ".venv", "Scripts", "python.exe"), "");
+    if ((cmd === "python" || cmd === "python3") && args.join(" ") === "-m venv .venv") {
+      const py = venvPython(cwd, HOST_OS);
+      mkdirSync(path.dirname(py), { recursive: true });
+      writeFileSync(py, "");
     } else if (cmd === "go" && args[0] === "mod") {
       writeFileSync(path.join(cwd, "go.mod"), `module ${args[2]}\n\ngo 1.27\n`);
     } else if (cmd === "go" && args[0] === "get") {
@@ -51,8 +58,8 @@ function polyglotMachine() {
   return { runner, log };
 }
 
-const ctxFor = (runner: ReturnType<typeof polyglotMachine>["runner"]) =>
-  ({ ...engineCtx(runner, tempPlatform("windows"), { exists: existsSync }), select: keepAll });
+const ctxFor = (runner: ReturnType<typeof polyglotMachine>["runner"], osName: OS = "windows") =>
+  ({ ...engineCtx(runner, tempPlatform(osName), { exists: existsSync }), select: keepAll });
 
 // ── Reading projects ────────────────────────────────────────
 
@@ -118,11 +125,12 @@ test("FastAPI stack: a .venv, main.py, then pip installs into the .venv and requ
   const parent = tmp("dkit-parent-");
   const dir = path.join(parent, "api");
   const { runner, log } = polyglotMachine();
-  const report = await installStack(findRecipe("fastapi-sqlalchemy", tempPlatform("windows")), ctxFor(runner), { projectDir: dir, explicitProject: true });
+  const report = await installStack(findRecipe("fastapi-sqlalchemy", tempPlatform(HOST_OS)), ctxFor(runner, HOST_OS), { projectDir: dir, explicitProject: true });
 
+  // python on Windows, python3 elsewhere; pip runs from the project's own .venv.
   assert.deepEqual(log.map((l) => [l.line, l.cwd]), [
-    ["python -m venv .venv", dir],
-    [`${path.join(dir, ".venv", "Scripts", "python.exe")} -m pip install fastapi[standard] sqlalchemy psycopg[binary]`, dir],
+    [`${pythonCommand(HOST_OS)} -m venv .venv`, dir],
+    [`${venvPython(dir, HOST_OS)} -m pip install fastapi[standard] sqlalchemy psycopg[binary]`, dir],
   ]);
   assert.match(readFileSync(path.join(dir, "main.py"), "utf8"), /app = FastAPI\(\)/);
   assert.deepEqual(readFileSync(path.join(dir, "requirements.txt"), "utf8").trim().split("\n"), ["fastapi[standard]", "sqlalchemy", "psycopg[binary]"]);

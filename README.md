@@ -1,6 +1,7 @@
 # devsetupkit-cli
 
 [![npm](https://img.shields.io/npm/v/devsetupkit-cli)](https://www.npmjs.com/package/devsetupkit-cli)
+[![CI](https://github.com/ikramawol/Devkit/actions/workflows/ci.yml/badge.svg)](https://github.com/ikramawol/Devkit/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/devsetupkit-cli)](LICENSE)
 
 Set up a developer machine with one command, and move your whole setup to a new PC or OS.
@@ -371,7 +372,11 @@ It never changes anything. It prints what to do, and exits with code 1 if it fou
 ```
 npm run dev -- doctor     # run without building
 npm test                  # tests run on a fake machine; nothing is really installed
+npm run typecheck
+npm run lint
 ```
+
+GitHub Actions runs the same checks on every push to main and every pull request ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): typecheck, lint, tests and build on Windows, macOS and Linux with Node.js 22 and 24, plus a build of the website.
 
 ```
 src/
