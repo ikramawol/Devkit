@@ -9,6 +9,7 @@ import { registerMaintain } from "./commands/maintain.js";
 import { registerMigrate } from "./commands/migrate.js";
 import { registerSnapshot } from "./commands/snapshot.js";
 import { registerStack } from "./commands/stack.js";
+import { registerSync } from "./commands/sync.js";
 import { registerTeam } from "./commands/team.js";
 
 // dist/index.js → ../package.json (shipped with the npm package), so the version is never out of date.
@@ -28,6 +29,7 @@ registerEnv(program);
 registerMigrate(program);
 registerTeam(program);
 registerSnapshot(program);
+registerSync(program);
 
 program.parseAsync().catch((err: unknown) => {
   // Ctrl+C inside a checklist

@@ -1,6 +1,12 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { checkbox, password } from "@inquirer/prompts";
+import { checkbox, password, select } from "@inquirer/prompts";
+
+/** Pick one of a list. Without a terminal, the first choice is used. */
+export async function chooseOne<T extends string>(message: string, choices: { value: T; name: string }[]): Promise<T> {
+  if (!(stdin.isTTY && stdout.isTTY) || choices.length === 1) return choices[0].value;
+  return select({ message, choices });
+}
 
 export type Confirm = (question: string) => Promise<boolean>;
 

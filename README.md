@@ -297,6 +297,27 @@ dkit snapshot unschedule [--forget-password] # turn it off (snapshots are kept)
 - **When the job fails**, the result goes to `~/.dkit/snapshots.log`, and `dkit snapshot list` shows it.
 - **If you update Node.js or reinstall dkit**, run `dkit snapshot schedule` again so the job points at the new location.
 
+## Sync your PCs through a cloud folder
+
+Keep a laptop and a desktop (Windows, macOS or Linux, in any mix) in step through OneDrive, Dropbox, Google Drive or iCloud Drive. dkit only writes files into the folder; your cloud app uploads them. dkit never signs in to anything.
+
+```
+dkit sync init          # first PC: finds your cloud folder, you choose a password
+dkit sync init          # each other PC: same cloud account, same password
+dkit sync push          # after you change your setup: save this PC's setup
+dkit sync status        # every PC, and how each differs from this one
+dkit sync pull          # compare with the PC that pushed last, pick what to bring over
+dkit sync pull --from laptop --dry-run
+dkit sync leave         # stop syncing on this PC (forgets the folder and the password)
+```
+
+**How it works:**
+- **One file per PC.** Each PC saves its setup as one encrypted file in `<cloud folder>/dkit-sync/machines/<pc-name>.dkit`. That's the same encrypted backup as `dkit migrate export`, so the cloud only ever sees encrypted data. File names are the PCs' names, nothing more.
+- **One shared password, saved on each PC.** Every PC uses the same password, kept in that PC's secure storage (DPAPI, Keychain, keyring), so you type it only once per PC. It's separate from the snapshot password.
+- **`pull` is a restore you approve.** It shows the differences first, lets you pick what to bring over, and asks before writing. Tools and extensions are only ever added, never removed. A settings file that gets replaced is copied first. Between different OSes, tools are installed with this OS's installer and settings are translated, like `dkit migrate restore`.
+- **Conflicts are left alone.** A cloud app's conflict copies (like `laptop (1).dkit`) are ignored, and files are written in one step, so a half-uploaded file is never read.
+- **Folders that aren't found automatically:** use `--folder` (for example, in WSL: `--folder /mnt/c/Users/<you>/OneDrive`). Two PCs with the same name: use `--name`.
+
 ## Keep your tools healthy
 
 ```
@@ -333,7 +354,7 @@ npm test                  # tests run on a fake machine; nothing is really insta
 ```
 src/
   index.ts              CLI entry
-  commands/             doctor, info, install, diagnose/update/uninstall, stack, scan/status, migrate, team, snapshot
+  commands/             doctor, info, install, diagnose/update/uninstall, stack, scan/status, migrate, team, snapshot, sync
   core/catalog.ts       every tool and library: how to find and install it on each OS
   core/detect.ts        is a tool installed?
   core/engine.ts        plan → confirm → install → verify
@@ -348,6 +369,7 @@ src/
   migrate/              backup format, encrypted .dkit archive, export, inspect/compare, restore,
                         transform.ts: translating settings between OSes
   maintain/             update checks, update/uninstall plans (maintain.ts), PATH and duplicate checks (diagnose.ts)
+  sync/                 cloud folders (cloud.ts), the sync folder: push, read, check the password (sync.ts)
   snapshot/             scheduled snapshots: taking and pruning them, OS schedulers (Task Scheduler, launchd, cron)
   utils/                safe command runner, prompts, logger, secret-store.ts (DPAPI / Keychain / keyring)
 ```
