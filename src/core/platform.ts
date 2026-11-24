@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,7 +13,12 @@ export interface PlatformInfo {
   appData: string;
   /** Where the official Claude Code native installer puts the binary. */
   claudeBinDir: string;
+  /** Linux running inside WSL on a Windows PC. */
+  wsl?: boolean;
 }
+
+/** A Windows program seen from inside WSL (/mnt/c/...): it isn't a Linux tool. */
+export const isWindowsSidePath = (p: string) => /^\/mnt\/[a-z]\//i.test(p);
 
 export function detectPlatform(): PlatformInfo {
   const p = process.platform;
@@ -31,10 +37,20 @@ export function detectPlatform(): PlatformInfo {
     home,
     appData,
     claudeBinDir: path.join(home, ".local", "bin"),
+    wsl: osName === "linux" && (!!process.env.WSL_DISTRO_NAME || /microsoft/i.test(os.release())),
   };
 }
 
 /** VS Code and its forks keep settings in <appData>/<dirName>/User on every OS. */
 export function editorUserDir(platform: PlatformInfo, dirName: string): string {
   return path.join(platform.appData, dirName, "User");
+}
+
+/**
+ * In WSL, VS Code-style editors usually run on Windows and keep their settings there, so files
+ * written to Linux's ~/.config/<editor>/User would do nothing. Only a Linux-installed editor (whose
+ * settings folder already exists) gets them.
+ */
+export function editorSettingsOnWindows(platform: PlatformInfo, dirName: string, exists = existsSync): boolean {
+  return !!platform.wsl && !exists(editorUserDir(platform, dirName));
 }

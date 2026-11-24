@@ -10,8 +10,33 @@ export interface MethodResult {
 
 // winget exit codes that mean "nothing to do", printed as signed or unsigned depending on Node/OS.
 const WINGET_OK = new Set([0, 3010, -1978335189, 0x8a15002b, -1978335135, 0x8a150061]);
+export const wingetOk = (code: number | null) => code !== null && WINGET_OK.has(code);
 
 let aptUpdated = false;
+
+/** Running as root (Linux/macOS)? Replaceable in tests. */
+export let isRoot = () => process.getuid?.() === 0;
+export function setIsRoot(fn: () => boolean) { isRoot = fn; }
+
+/**
+ * apt-get as root, or through sudo. With `refresh`, runs `apt-get update` first (once per dkit run).
+ * Output is shown live, and apt can ask questions (uninstall doesn't pass -y, so apt shows what it removes).
+ */
+export function aptGet(runner: Runner, args: string[], refresh = true): MethodResult {
+  const live = { inherit: true };
+  if (!runner.which("apt-get")) return { ok: false, manual: true, message: "apt-get not found; use your distro's package manager" };
+  // As root (containers, fresh servers) there's often no sudo, and none is needed.
+  const root = isRoot();
+  if (!root && !runner.which("sudo"))
+    return { ok: false, manual: true, message: `needs admin rights: run as root, or install sudo (then: sudo apt-get ${args.join(" ")})` };
+  const apt = (a: string[]) => (root ? runner.run("apt-get", a, live) : runner.run("sudo", ["apt-get", ...a], live));
+  if (refresh && !aptUpdated) {
+    apt(["update"]);
+    aptUpdated = true;
+  }
+  const r = apt(args);
+  return r.ok ? { ok: true } : { ok: false, message: r.error ?? `apt-get exited with ${r.code}` };
+}
 
 /** Human-readable form of what a method will do, for plans and --dry-run. */
 export function describeMethod(m: Method): string {
@@ -36,7 +61,7 @@ export function runMethod(m: Method, runner: Runner): MethodResult {
         "install", "--id", m.id, "--exact", "--silent",
         "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity",
       ], live);
-      return r.code !== null && WINGET_OK.has(r.code)
+      return wingetOk(r.code)
         ? { ok: true }
         : { ok: false, message: r.error ?? `winget exited with ${r.code}` };
     }
@@ -50,15 +75,8 @@ export function runMethod(m: Method, runner: Runner): MethodResult {
       const r = runner.run("brew", args, live);
       return r.ok ? { ok: true } : { ok: false, message: r.error ?? `brew exited with ${r.code}` };
     }
-    case "apt": {
-      if (!runner.which("apt-get")) return { ok: false, manual: true, message: "apt-get not found; install with your distro's package manager" };
-      if (!aptUpdated) {
-        runner.run("sudo", ["apt-get", "update"], live);
-        aptUpdated = true;
-      }
-      const r = runner.run("sudo", ["apt-get", "install", "-y", ...m.packages], live);
-      return r.ok ? { ok: true } : { ok: false, message: r.error ?? `apt-get exited with ${r.code}` };
-    }
+    case "apt":
+      return aptGet(runner, ["install", "-y", ...m.packages]);
     case "npm": {
       const r = runner.run("npm", ["install", "-g", m.pkg], live);
       return r.ok ? { ok: true } : { ok: false, message: r.error ?? `npm exited with ${r.code}` };

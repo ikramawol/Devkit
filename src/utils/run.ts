@@ -12,6 +12,10 @@ export interface RunResult {
 export interface RunOptions {
   /** Show the program's output live (installers) instead of capturing it. */
   inherit?: boolean;
+  /** Folder to run in (e.g. a project, for `pnpm add`). Default: the current folder. */
+  cwd?: string;
+  /** Text sent to the program's stdin, e.g. a password, so it never appears in the process list. */
+  input?: string;
 }
 
 /**
@@ -32,7 +36,7 @@ export interface Runner {
 const isWindows = process.platform === "win32";
 
 // Arguments we pass to cmd.exe must be boring. This blocks &, |, ^, %, quotes, etc.
-const SAFE_ARG = /^[\w.\-@:=\/\\ +~,]+$/;
+const SAFE_ARG = /^[\w.\-@:=/\\ +~,]+$/;
 
 function toResult(r: ReturnType<typeof spawnSync>): RunResult {
   const stdout = (r.stdout ?? "").toString().trim();
@@ -57,7 +61,7 @@ export function which(command: string): string | null {
 }
 
 export function run(command: string, args: string[] = [], opts?: RunOptions): RunResult {
-  const base = { encoding: "utf8" as const, stdio: stdio(opts), maxBuffer: 64 * 1024 * 1024 };
+  const base = { encoding: "utf8" as const, stdio: stdio(opts), maxBuffer: 64 * 1024 * 1024, cwd: opts?.cwd, input: opts?.input };
   if (!isWindows) return toResult(spawnSync(command, args, base));
 
   // Windows: `code`, `npm`, `npx` are .cmd shims that Node refuses to spawn
@@ -84,6 +88,7 @@ export function powershell(script: string, opts?: RunOptions): RunResult {
     spawnSync(exe, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
       encoding: "utf8",
       stdio: stdio(opts),
+      input: opts?.input,
     }),
   );
 }

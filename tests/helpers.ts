@@ -28,12 +28,15 @@ export function tempPlatform(osName: OS): PlatformInfo {
 export function fakeRunner(opts: {
   installed: Set<string>;
   responses?: Record<string, RunResult>;
+  /** PowerShell answers: first key contained in the script wins. */
+  ps?: Record<string, RunResult>;
   failInstall?: Set<string>;
 }) {
   const calls: string[] = [];
   const installs: Record<string, string> = {
     "Git.Git": "git", "OpenJS.NodeJS.LTS": "node", "@openai/codex": "codex",
-    "Microsoft.VisualStudioCode": "code", "install.ps1": "claude",
+    "Microsoft.VisualStudioCode": "code", "install.ps1": "claude", "Docker.DockerDesktop": "docker",
+    "PostgreSQL.PostgreSQL.17": "psql",
   };
   const runner: Runner = {
     which: (c) => (opts.installed.has(c) ? `/fake/bin/${c}` : null),
@@ -53,6 +56,7 @@ export function fakeRunner(opts: {
     },
     powershell: (s) => {
       calls.push(`ps ${s}`);
+      for (const [key, res] of Object.entries(opts.ps ?? {})) if (s.includes(key)) return res;
       if (s.includes("install.ps1")) opts.installed.add("claude");
       return ok();
     },

@@ -6,10 +6,11 @@ import type { Logger } from "../utils/logger.js";
 import type { PlatformInfo } from "../core/platform.js";
 import { editorUserDir } from "../core/platform.js";
 import { CATALOG } from "../core/catalog.js";
-import { detectItem } from "../core/detect.js";
+import { scanEnvironment } from "../manifest/manifest.js";
+import { listExtensions, readGitConfig, shellProfiles } from "../manifest/discover.js";
 import { EDITORS, EDITOR_DIRS, EDITOR_FILES } from "./editors.js";
 import {
-  type Backup, type BundledFile, bundleFile, collectDir, redactJson, redactJsonc,
+  type Backup, type BundledFile, bundleFile, collectDir, redactJson, redactJsonc, redactShell,
 } from "./bundle.js";
 
 export interface ExportDeps {
@@ -21,9 +22,6 @@ export interface ExportDeps {
 
 const read = (p: string) => (existsSync(p) ? readFileSync(p) : null);
 
-// Git keys that hold secrets or machine-specific helpers. Re-created per machine instead.
-const SKIP_GIT_KEY = /^(credential\.|http\..*extraheader|.*(token|password))/i;
-
 // What we take from ~/.claude. Sessions, history, caches and credentials stay behind.
 const CLAUDE_FILES = ["settings.json", "CLAUDE.md", "keybindings.json"];
 const CLAUDE_DIRS = ["commands", "agents", "skills", "output-styles"];
@@ -34,9 +32,11 @@ export function createBackup(deps: ExportDeps): Backup {
   const { runner, platform, log } = deps;
   const notes: string[] = [];
 
-  // 1. Tools from the catalog.
+  // 1. The manifest (same as `dkit scan`): tools and versions, extensions, npm packages, Git preferences.
+  // Machine tools only: project libraries live in each project's package.json, not on the machine.
   log.step("Checking installed tools");
-  const tools = CATALOG.filter((i) => detectItem(i, deps).installed).map((i) => i.id);
+  const manifest = scanEnvironment(deps);
+  const tools = manifest.tools.map((t) => t.id);
   log.ok(`${tools.length} tools: ${tools.join(", ")}`);
 
   // 2. Other apps (Windows): everything winget can see, minus what the catalog covers.
@@ -68,9 +68,7 @@ export function createBackup(deps: ExportDeps): Backup {
     const hasCli = !!runner.which(ed.cli);
     if (!hasCli && !existsSync(userDir)) continue;
     log.step(`Reading ${ed.name}`);
-    const extensions = hasCli
-      ? runner.run(ed.cli, ["--list-extensions"]).stdout.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^[\w-]+\.[\w.-]+$/.test(s))
-      : [];
+    const extensions = manifest.editors.find((e) => e.id === ed.id)?.extensions ?? (hasCli ? listExtensions(runner, ed.cli) ?? [] : []);
     if (!hasCli) notes.push(`${ed.name}: \`${ed.cli}\` command not found, so extensions were not recorded.`);
 
     const files: BundledFile[] = [];
@@ -88,15 +86,10 @@ export function createBackup(deps: ExportDeps): Backup {
 
   // 4. Git global config.
   const git: Backup["git"] = { config: [] };
-  if (runner.which("git")) {
+  const gitConfig = readGitConfig(runner); // secrets already left out
+  if (gitConfig) {
     log.step("Reading Git config");
-    const r = runner.run("git", ["config", "--global", "--list"]);
-    for (const line of r.stdout.split(/\r?\n/)) {
-      const i = line.indexOf("=");
-      if (i <= 0) continue;
-      const key = line.slice(0, i);
-      const value = line.slice(i + 1);
-      if (SKIP_GIT_KEY.test(key)) continue;
+    for (const [key, value] of gitConfig) {
       if (key === "core.excludesfile") {
         const p = value.replace(/^~/, platform.home);
         const buf = read(p);
@@ -144,17 +137,8 @@ export function createBackup(deps: ExportDeps): Backup {
   }
 
   // 6. Global npm packages (other than ones the catalog installs).
-  let npmGlobals: string[] = [];
-  if (runner.which("npm")) {
-    const r = runner.run("npm", ["ls", "-g", "--depth=0", "--json"]);
-    try {
-      const catalogPkgs = new Set(CATALOG.map((i) => (i.install.windows?.type === "npm" ? i.install.windows.pkg : "")));
-      npmGlobals = Object.keys(JSON.parse(r.stdout).dependencies ?? {}).filter(
-        (n) => !["npm", "corepack"].includes(n) && !catalogPkgs.has(n),
-      );
-      log.ok(`${npmGlobals.length} global npm packages`);
-    } catch { /* ignore */ }
-  }
+  const npmGlobals = manifest.npmGlobals;
+  if (npmGlobals.length) log.ok(`${npmGlobals.length} global npm packages`);
 
   // 7. SSH config (never keys) and shell profile.
   const ssh: Backup["ssh"] = {};
@@ -163,16 +147,13 @@ export function createBackup(deps: ExportDeps): Backup {
   notes.push("SSH private keys were NOT exported. Copy them yourself or create new ones and add them to GitHub.");
 
   const shell: Backup["shell"] = [];
-  const shellCandidates: [Backup["shell"][number]["kind"], string][] =
-    platform.os === "windows"
-      ? [
-          ["powershell", path.join(platform.home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")],
-          ["powershell", path.join(platform.home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1")],
-        ]
-      : [["bash", path.join(platform.home, ".bashrc")], ["zsh", path.join(platform.home, ".zshrc")]];
-  for (const [kind, p] of shellCandidates) {
-    const buf = read(p);
-    if (buf) shell.push({ kind, file: bundleFile(path.relative(platform.home, p), buf) });
+  for (const { kind, file: p } of shellProfiles(platform)) {
+    const buf = readFileSync(p);
+    const rel = path.relative(platform.home, p);
+    const { text, redacted } = redactShell(buf.toString("utf8"));
+    if (redacted.length) notes.push(`${kind} profile (${rel}): removed secret values (${redacted.join(", ")}). Fill them in after restore.`);
+    // Nothing secret: keep the exact bytes so an unchanged file restores as "unchanged".
+    shell.push({ kind, file: bundleFile(rel, redacted.length ? Buffer.from(text, "utf8") : buf) });
   }
 
   return {
@@ -189,5 +170,6 @@ export function createBackup(deps: ExportDeps): Backup {
     ssh,
     shell,
     notes,
+    manifest,
   };
 }
