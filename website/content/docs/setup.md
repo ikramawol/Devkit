@@ -6,7 +6,7 @@ order: 3
 
 # Installation
 
-Needs Node.js 20 or newer.
+Needs Node.js 22 or newer.
 
 ```powershell
 npm install -g devsetupkit-cli

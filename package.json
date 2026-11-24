@@ -1,6 +1,6 @@
 {
   "name": "devsetupkit-cli",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Set up a developer machine with one command, and move your setup to a new PC or OS",
   "license": "MIT",
   "author": "ikramawol",
@@ -22,7 +22,8 @@
     "dkit": "dist/index.js"
   },
   "files": [
-    "dist/**/*.js"
+    "dist/**/*.js",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -33,7 +34,7 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.10.1",

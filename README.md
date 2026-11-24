@@ -8,7 +8,7 @@ Set up a developer machine with one command, and move your whole setup to a new 
 
 ## Install
 
-Needs Node.js 20 or newer.
+Needs Node.js 22 or newer.
 
 ```powershell
 npm install -g devsetupkit-cli

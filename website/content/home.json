@@ -12,7 +12,7 @@
       "yarn": "yarn global add devsetupkit-cli",
       "bun": "bun add -g devsetupkit-cli"
     },
-    "note": "Needs Node.js 20+. Installs the dkit command. Free and MIT licensed."
+    "note": "Needs Node.js 22+. Installs the dkit command. Free and MIT licensed."
   },
   "stats": [
     [
