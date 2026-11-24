@@ -48,6 +48,7 @@ export default function Home() {
               <p className="mu" style={{ fontSize: 17, maxWidth: "30em" }}>{hero.text}</p>
               <InstallBox commands={hero.install} />
               <p className="mu" style={{ marginTop: 12, fontSize: 13 }}>Needs Node.js 22+. Installs the <code>dkit</code> command. Free and MIT licensed.</p>
+              <p className="soon"><span>{hero.comingSoon.label}</span>{hero.comingSoon.text}</p>
             </div>
             <Terminal steps={home.terminal} />
           </div>
