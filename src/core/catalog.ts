@@ -38,7 +38,10 @@ export interface Detect {
 export type Category =
   | "Essentials" | "Languages" | "Editors & AI" | "Databases" | "Tools"
   // Project resources
-  | "Frameworks" | "Database libraries" | "Auth";
+  | "Frameworks" | "Database libraries" | "Auth" | "Payments & email" | "App architecture";
+
+/** What kind of project a library goes into: JavaScript (package.json), Python, Go or Flutter. */
+export type Ecosystem = "node" | "python" | "go" | "flutter";
 
 /**
  * Where a resource lives.
@@ -55,8 +58,10 @@ export interface CatalogItem {
   description: string;
   /** What `dkit migrate` saves and restores for it. Kept honest by a test against src/migrate. */
   snapshot?: string[];
-  /** Project resources: the npm packages added to the project (`dev` = devDependencies). */
+  /** Project resources: the packages added to the project (`dev` = devDependencies). */
   packages?: {
+    /** Default "node" (npm packages). Python: pip packages; Go: module paths; Flutter: pub packages. */
+    ecosystem?: Ecosystem;
     deps?: string[];
     dev?: string[];
     /** Packages that must match another's version: { prisma: "@prisma/client" } adds prisma@<client's version>. */
@@ -231,6 +236,35 @@ export const CATALOG: CatalogItem[] = [
     removeManually: { linux: "Delete the ~/.bun folder, then remove the Bun lines (BUN_INSTALL, PATH) from ~/.bashrc." },
     notes: ["Open a new terminal so `bun` is on your PATH."],
   },
+  {
+    id: "go",
+    name: "Go",
+    kind: "machine",
+    description: "The Go programming language and toolchain (go build, go run, go get).",
+    category: "Languages",
+    detect: { command: "go", versionArgs: ["version"], paths: { windows: ["%ProgramFiles%\\Go\\bin\\go.exe"] } },
+    install: {
+      windows: { type: "winget", id: "GoLang.Go" },
+      macos: { type: "brew", formula: "go" },
+      linux: { type: "apt", packages: ["golang-go"] },
+    },
+    notes: ["Open a new terminal so `go` is on your PATH."],
+  },
+  {
+    id: "flutter",
+    name: "Flutter",
+    kind: "machine",
+    description: "Google's SDK for building mobile, desktop and web apps from one Dart codebase.",
+    category: "Languages",
+    detect: { command: "flutter", versionArgs: ["--version"] },
+    install: {
+      windows: { type: "manual", url: "https://docs.flutter.dev/get-started/install/windows" },
+      macos: { type: "brew", cask: "flutter" },
+      linux: { type: "manual", url: "https://docs.flutter.dev/get-started/install/linux" },
+    },
+    requires: { all: ["git"] },
+    notes: ["Run `flutter doctor` to see what else your platform needs (Android Studio, Xcode, Chrome...)."],
+  },
 
   // ── Editors & AI ────────────────────────────────────────────
   {
@@ -361,6 +395,28 @@ export const CATALOG: CatalogItem[] = [
       macos: { type: "brew", cask: "mongodb-compass" },
       linux: { type: "manual", url: "https://www.mongodb.com/try/download/compass" },
     },
+  },
+  {
+    id: "redis",
+    name: "Redis",
+    kind: "machine",
+    description: "In-memory data store for caching, queues and sessions. On Windows: Memurai, a Redis-compatible server.",
+    category: "Databases",
+    detect: {
+      command: "redis-server",
+      commandFor: { windows: "memurai" },
+      versionArgs: ["--version"],
+      paths: { windows: ["%ProgramFiles%\\Memurai\\memurai.exe"] },
+    },
+    install: {
+      // Redis has no official Windows build; Memurai Developer is a free Redis-compatible server for development.
+      windows: { type: "winget", id: "Memurai.MemuraiDeveloper" },
+      macos: { type: "brew", formula: "redis" },
+      linux: { type: "apt", packages: ["redis-server"] },
+    },
+    notes: [
+      "It listens on localhost:6379. Windows (Memurai) and Linux start it as a service; on macOS run `brew services start redis`.",
+    ],
   },
 
   // ── Tools ───────────────────────────────────────────────────
@@ -517,9 +573,136 @@ export const CATALOG: CatalogItem[] = [
     packages: { dev: ["dbmate"] },
     notes: ["Set DATABASE_URL, then `npx dbmate new <name>` and `npx dbmate up`."],
   },
+  {
+    id: "ioredis",
+    name: "ioredis",
+    kind: "project",
+    description: "Redis client for Node.js, with clusters, pipelines and TypeScript types.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { deps: ["ioredis"] },
+    notes: ["Connect with `new Redis(process.env.REDIS_URL)`, e.g. REDIS_URL=redis://localhost:6379"],
+  },
+  {
+    id: "stripe",
+    name: "Stripe",
+    kind: "project",
+    description: "Stripe's official Node.js library for payments, subscriptions and webhooks.",
+    category: "Payments & email",
+    detect: {},
+    install: {},
+    packages: { deps: ["stripe"] },
+    notes: ["Set STRIPE_SECRET_KEY (and STRIPE_WEBHOOK_SECRET for webhooks) in your .env. Use test-mode keys while developing."],
+  },
+  {
+    id: "resend",
+    name: "Resend",
+    kind: "project",
+    description: "Resend's Node.js library for sending transactional email.",
+    category: "Payments & email",
+    detect: {},
+    install: {},
+    packages: { deps: ["resend"] },
+    notes: ["Set RESEND_API_KEY in your .env, and verify your sending domain in the Resend dashboard."],
+  },
+
+  // ── Python libraries (a project with requirements.txt or pyproject.toml; pip in .venv) ──
+  {
+    id: "fastapi",
+    name: "FastAPI",
+    kind: "project",
+    description: "Python web framework for APIs, with automatic docs. Includes the `fastapi dev` server.",
+    category: "Frameworks",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "python", deps: ["fastapi[standard]"] },
+    notes: ["While it runs (`fastapi dev main.py`), interactive API docs are at http://127.0.0.1:8000/docs"],
+  },
+  {
+    id: "sqlalchemy",
+    name: "SQLAlchemy",
+    kind: "project",
+    description: "Python's SQL toolkit and ORM.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "python", deps: ["sqlalchemy"] },
+    suggests: { ids: ["psycopg"], what: "a database driver" },
+  },
+  {
+    id: "psycopg",
+    name: "psycopg (PostgreSQL)",
+    kind: "project",
+    description: "PostgreSQL driver for Python, used by SQLAlchemy.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "python", deps: ["psycopg[binary]"] },
+    notes: ["SQLAlchemy URL: postgresql+psycopg://postgres:<password>@localhost:5432/<db>"],
+  },
+
+  // ── Go libraries (a project with go.mod; go get) ──
+  {
+    id: "gin",
+    name: "Gin",
+    kind: "project",
+    description: "Fast HTTP web framework for Go.",
+    category: "Frameworks",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "go", deps: ["github.com/gin-gonic/gin"] },
+    notes: ["Start it with `go run .` (listens on :8080)."],
+  },
+  {
+    id: "pgx",
+    name: "pgx (PostgreSQL)",
+    kind: "project",
+    description: "PostgreSQL driver and toolkit for Go.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "go", deps: ["github.com/jackc/pgx/v5"] },
+    notes: ["Connect with pgxpool.New(ctx, os.Getenv(\"DATABASE_URL\")). `go mod tidy` drops modules your code doesn't import yet."],
+  },
+  {
+    id: "go-redis",
+    name: "go-redis",
+    kind: "project",
+    description: "Redis client for Go.",
+    category: "Database libraries",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "go", deps: ["github.com/redis/go-redis/v9"] },
+  },
+
+  // ── Flutter libraries (a project with pubspec.yaml; flutter pub add) ──
+  {
+    id: "flutter-bloc",
+    name: "flutter_bloc",
+    kind: "project",
+    description: "BLoC state management for Flutter: widgets that rebuild from streams of state.",
+    category: "App architecture",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "flutter", deps: ["flutter_bloc"] },
+  },
+  {
+    id: "get-it",
+    name: "get_it",
+    kind: "project",
+    description: "Service locator for Dart and Flutter: register services once, get them anywhere (dependency injection).",
+    category: "App architecture",
+    detect: {},
+    install: {},
+    packages: { ecosystem: "flutter", deps: ["get_it"] },
+  },
 ];
 
-export const CATEGORIES: Category[] = ["Essentials", "Languages", "Editors & AI", "Databases", "Tools", "Frameworks", "Database libraries", "Auth"];
+export const CATEGORIES: Category[] = [
+  "Essentials", "Languages", "Editors & AI", "Databases", "Tools",
+  "Frameworks", "Database libraries", "Auth", "Payments & email", "App architecture",
+];
 
 export function getItem(id: string): CatalogItem | undefined {
   return CATALOG.find((i) => i.id === id);

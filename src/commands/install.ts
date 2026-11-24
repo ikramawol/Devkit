@@ -3,7 +3,7 @@ import { CATALOG, CATEGORIES } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
 import { installTools } from "../core/engine.js";
 import { checkPrereqs, type PrereqCheck } from "../core/prereqs.js";
-import { detectInProject } from "../core/project.js";
+import { detectInProject, itemEcosystem } from "../core/project.js";
 import { c } from "../utils/logger.js";
 import type { Choice } from "../utils/prompt.js";
 import { makeContext, resolveProject, type CommonOpts, type ProjectOpts } from "./context.js";
@@ -43,8 +43,8 @@ export function registerInstall(program: Command) {
         for (const cat of CATEGORIES) {
           for (const item of CATALOG.filter((i) => i.category === cat)) {
             if (item.kind === "project") {
-              // Libraries only make sense inside a project.
-              if (!ctx.project) continue;
+              // Libraries only make sense inside a project, and only its own kind (no Go libraries in a JavaScript project).
+              if (!ctx.project || itemEcosystem(item) !== ctx.project.ecosystem) continue;
               const s = detectInProject(item, ctx.project);
               choices.push({
                 value: item.id,

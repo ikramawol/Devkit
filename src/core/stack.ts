@@ -7,7 +7,9 @@ import {
   buildPlan, executePlan, installTools, printPlan, printReport, type EngineContext, type InstallReport,
 } from "./engine.js";
 import type { PlatformInfo } from "./platform.js";
-import { PACKAGE_MANAGERS, pmRequires, readProject, type PackageManager } from "./project.js";
+import {
+  ECOSYSTEM_LABEL, ECOSYSTEM_PM, PACKAGE_MANAGERS, itemEcosystem, pmRequires, readProject, type NodePackageManager, type PackageManager,
+} from "./project.js";
 import { checkNewProjectDir, describeSteps, getStarter, runStarter, starterRequires, STARTERS } from "./starters.js";
 import { findTeam, listTeams, teamsDir } from "./team.js";
 import { parseJson } from "../utils/json.js";
@@ -76,6 +78,75 @@ export const BUILTIN_RECIPES: Recipe[] = [
     machine: DB,
     libraries: ["express", "prisma"],
   },
+  {
+    id: "next-drizzle-auth",
+    name: "Next.js + PostgreSQL + Drizzle + Better Auth",
+    description: "Modern full-stack: one Next.js app with auth and a typed PostgreSQL ORM, no separate API.",
+    starter: "next",
+    machine: DB,
+    libraries: ["better-auth", "drizzle", "pg"],
+    notes: ["Better Auth needs its tables: run `npx @better-auth/cli generate`, then your Drizzle migration."],
+  },
+  {
+    id: "react-hono",
+    name: "React + Vite + Hono + PostgreSQL",
+    description: "Separate frontend and backend: a React app on Vite, with a Hono API in the same repo.",
+    starter: "vite-react",
+    machine: DB,
+    libraries: ["hono", "pg"],
+    notes: [
+      "Put the API in server/index.ts (Hono + @hono/node-server), and send /api calls to it with `server.proxy` in vite.config.ts.",
+    ],
+  },
+  {
+    id: "nest-prisma-redis",
+    name: "NestJS + PostgreSQL + Prisma + Redis",
+    description: "Production backend: NestJS with Prisma on PostgreSQL, and Redis for caching and queues.",
+    starter: "nest",
+    machine: ["node", "postgresql", "redis"],
+    libraries: ["prisma", "ioredis"],
+  },
+  {
+    id: "express-kysely",
+    name: "Express + PostgreSQL + Kysely",
+    description: "Lightweight REST API: Express with type-safe SQL from Kysely.",
+    starter: "node",
+    machine: DB,
+    libraries: ["express", "kysely", "pg"],
+  },
+  {
+    id: "fastapi-sqlalchemy",
+    name: "FastAPI + PostgreSQL + SQLAlchemy",
+    description: "Python backend: FastAPI with SQLAlchemy and the psycopg driver, in a virtual environment.",
+    starter: "fastapi",
+    machine: ["python", "postgresql"],
+    libraries: ["fastapi", "sqlalchemy", "psycopg"],
+  },
+  {
+    id: "gin-redis",
+    name: "Go Gin + PostgreSQL + Redis",
+    description: "Go backend: Gin, with pgx for PostgreSQL and go-redis for Redis.",
+    starter: "gin",
+    machine: ["go", "postgresql", "redis"],
+    libraries: ["gin", "pgx", "go-redis"],
+  },
+  {
+    id: "flutter-bloc",
+    name: "Flutter + BLoC + GetIt",
+    description: "Mobile development: a Flutter app with BLoC state management and GetIt for dependency injection.",
+    starter: "flutter",
+    machine: ["flutter"],
+    libraries: ["flutter-bloc", "get-it"],
+  },
+  {
+    id: "next-saas",
+    name: "Next.js + Better Auth + Stripe + Resend",
+    description: "SaaS starter: Next.js with sign-in, payments and transactional email.",
+    starter: "next",
+    machine: ["node"],
+    libraries: ["better-auth", "stripe", "resend"],
+    notes: ["Better Auth needs a database: add one with --with postgresql,drizzle,pg (or use your own)."],
+  },
 ];
 
 // ── Validation (recipes may come from files other people wrote) ─────────
@@ -114,7 +185,13 @@ export function validateRecipe(data: unknown, where = "recipe"): Recipe {
   if (!machine.length && !libraries.length) fail("a recipe needs at least one tool or library");
   if (r.starter !== undefined && (typeof r.starter !== "string" || !getStarter(r.starter)))
     fail(`unknown starter "${String(r.starter)}". Available: ${STARTERS.map((s) => s.id).join(", ")}`);
-  if (r.pm !== undefined && !PACKAGE_MANAGERS.includes(r.pm as PackageManager)) fail(`pm must be one of ${PACKAGE_MANAGERS.join(", ")}`);
+  // One project can't be JavaScript and Python at once: libraries and the starter must agree.
+  const ecosystems = new Set(libraries.map((id) => itemEcosystem(getItem(id)!)));
+  const starter = typeof r.starter === "string" ? getStarter(r.starter) : undefined;
+  if (starter) ecosystems.add(starter.ecosystem);
+  if (ecosystems.size > 1) fail(`mixes ${[...ecosystems].map((e) => ECOSYSTEM_LABEL[e]).join(" and ")} libraries; one stack makes one kind of project`);
+  if (r.pm !== undefined && !PACKAGE_MANAGERS.includes(r.pm as NodePackageManager)) fail(`pm must be one of ${PACKAGE_MANAGERS.join(", ")}`);
+  if (r.pm !== undefined && [...ecosystems].some((e) => e !== "node")) fail("pm only applies to JavaScript stacks");
   const notes = r.notes === undefined ? undefined : strings("notes");
   return {
     id: r.id as string,
@@ -264,11 +341,11 @@ export async function installStack(
   // ── New project ──
   const starter = recipe.starter ? getStarter(recipe.starter) : undefined;
   if (!starter) {
-    throw new Error(`${recipe.name} has no starter, so it can only be added to an existing project: run it inside one, or use --project <folder with a package.json>.`);
+    throw new Error(`${recipe.name} has no starter, so it can only be added to an existing project: run it inside one, or use --project <project folder>.`);
   }
   if (!opts.explicitProject) {
     throw new Error(
-      `There's no package.json here.\n` +
+      `There's no project here (no package.json, requirements.txt, go.mod or pubspec.yaml).\n` +
       `  To create a new project: dkit stack install ${recipe.id} --project <new-folder>\n` +
       `  To add this stack to an existing project: run it inside that project.`,
     );
@@ -276,14 +353,17 @@ export async function installStack(
   const dirProblem = checkNewProjectDir(opts.projectDir);
   if (dirProblem) throw new Error(dirProblem);
 
-  const pm = opts.pm ?? recipe.pm ?? "npm";
+  // JavaScript projects use --pm (or the stack's, or npm); Python, Go and Flutter have one way each.
+  const eco = starter.ecosystem;
+  if (eco !== "node" && opts.pm) throw new Error(`${recipe.name} makes a ${ECOSYSTEM_LABEL[eco]} project, so --pm doesn't apply: libraries are added with ${ECOSYSTEM_PM[eco]}.`);
+  const pm: PackageManager = eco === "node" ? opts.pm ?? recipe.pm ?? "npm" : ECOSYSTEM_PM[eco];
   const needed = [...new Set([...machine, ...starterRequires(pm), ...pmRequires(pm)])];
   const machinePlan = buildPlan(needed, ctx);
   printPlan(machinePlan, ctx);
 
   const name = path.basename(opts.projectDir);
   log.info(c.bold(`\nWill create ${name}`) + c.dim(`  ${opts.projectDir} · ${starter.name} · ${pm}`));
-  for (const s of describeSteps(starter, pm, name)) log.info(c.dim(`  runs: ${s}`));
+  for (const s of describeSteps(starter, pm, name, ctx.platform.os)) log.info(c.dim(`  runs: ${s}`));
   if (libraries.length) log.info(c.bold("Then add to it: ") + names(libraries));
 
   const blockedTool = machinePlan.blocked.find((i) => [...starterRequires(pm), ...pmRequires(pm)].includes(i.id));
@@ -310,7 +390,7 @@ export async function installStack(
   // 2. The project itself, with the framework's own starter.
   ctx.runner.refreshPath();
   log.step(`Creating ${name} with ${starter.name}…`);
-  const starterError = runStarter(starter, pm, opts.projectDir, ctx.runner);
+  const starterError = runStarter(starter, pm, opts.projectDir, ctx.runner, ctx.platform.os);
   const projectLabel = `New project ${name} (${starter.name})`;
   if (starterError) {
     log.error(starterError);

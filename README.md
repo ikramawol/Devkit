@@ -88,16 +88,25 @@ Today every tool is at L2 on Windows, because nothing configures tools yet (L3).
 | Group | Tools (id) |
 |---|---|
 | Essentials | Git (`git`), Git Bash (`git-bash`), OpenSSH (`openssh`), GitHub CLI (`gh`) |
-| Languages | Node.js + npm (`node`), Python (`python`), pnpm (`pnpm`), Yarn (`yarn`), Bun (`bun`) |
+| Languages | Node.js + npm (`node`), Python (`python`), pnpm (`pnpm`), Yarn (`yarn`), Bun (`bun`), Go (`go`), Flutter (`flutter`) |
 | Editors & AI | VS Code (`vscode`), Antigravity (`antigravity`), Claude Code (`claude`), Codex CLI (`codex`) |
-| Databases | PostgreSQL 17 (`postgresql`), pgAdmin (`pgadmin`), MongoDB (`mongodb`), MongoDB Compass (`compass`) |
+| Databases | PostgreSQL 17 (`postgresql`), pgAdmin (`pgadmin`), MongoDB (`mongodb`), MongoDB Compass (`compass`), Redis (`redis`; on Windows: Memurai, a Redis-compatible server) |
 | Tools | Docker (`docker`), Postman (`postman`), Prettier (`prettier`), ESLint (`eslint`) |
 
 Windows uses winget (plus the official Claude Code installer and npm). macOS uses Homebrew. Linux uses apt; tools with no apt package show a download link.
 
 ## Add libraries to a project
 
-Libraries like Hono or Kysely belong to a project, not to your computer, so dkit adds them to the project's `package.json` with the project's own package manager.
+Libraries like Hono or Kysely belong to a project, not to your computer, so dkit adds them to the project with the project's own tool. dkit knows four kinds of project, by their files:
+
+| Project | Found by | Libraries are added with |
+|---|---|---|
+| JavaScript | `package.json` | npm, pnpm, Yarn or Bun |
+| Python | `requirements.txt` or `pyproject.toml` | pip, inside the project's `.venv` (created if missing), and recorded in `requirements.txt` |
+| Go | `go.mod` | `go get` |
+| Flutter | `pubspec.yaml` | `flutter pub add` |
+
+A library only goes into its own kind of project: asking for Gin in a JavaScript project is refused with a clear message.
 
 ```powershell
 cd my-api
@@ -107,16 +116,20 @@ dkit install prisma --pm pnpm            # override the package manager
 dkit doctor                              # inside a project: also lists which libraries it has
 ```
 
-- **Which project:** the folder you're in, or `--project <folder>`. It must have a `package.json`; dkit never edits a parent folder's project by accident.
-- **Which package manager:** `packageManager` in package.json, else the lockfile (`pnpm-lock.yaml`, `bun.lock`, `yarn.lock`, `package-lock.json`), else npm. If that package manager isn't installed, dkit installs it first (pnpm and Yarn need Node.js; Bun doesn't).
-- Only missing libraries are added, regular and dev dependencies in one command each, and the result is checked against package.json.
+- **Which project:** the folder you're in, or `--project <folder>`. dkit never edits a parent folder's project by accident.
+- **Which package manager (JavaScript):** `packageManager` in package.json, else the lockfile (`pnpm-lock.yaml`, `bun.lock`, `yarn.lock`, `package-lock.json`), else npm. If that package manager isn't installed, dkit installs it first (pnpm and Yarn need Node.js; Bun doesn't). Python, Go and Flutter projects need Python, Go or Flutter, which dkit installs first too.
+- Only missing libraries are added, regular and dev dependencies in one command each, and the result is checked against the project's own files.
 - Machine tools and libraries can be mixed: `dkit install gh hono`.
 
 | Group | Libraries (id) |
 |---|---|
 | Frameworks | Hono (`hono`), Express (`express` + dev @types/express) |
-| Database libraries | Kysely (`kysely`), Drizzle ORM (`drizzle`: drizzle-orm + dev drizzle-kit), Prisma (`prisma`: @prisma/client + dev prisma at the same version), dbmate (`dbmate`, dev), node-postgres (`pg` + dev @types/pg) |
+| Database libraries | Kysely (`kysely`), Drizzle ORM (`drizzle`: drizzle-orm + dev drizzle-kit), Prisma (`prisma`: @prisma/client + dev prisma at the same version), dbmate (`dbmate`, dev), node-postgres (`pg` + dev @types/pg), ioredis (`ioredis`) |
 | Auth | Better Auth (`better-auth`) |
+| Payments & email | Stripe (`stripe`), Resend (`resend`) |
+| Python | FastAPI (`fastapi`: fastapi[standard]), SQLAlchemy (`sqlalchemy`), psycopg (`psycopg`: psycopg[binary]) |
+| Go | Gin (`gin`), pgx (`pgx`), go-redis (`go-redis`) |
+| Flutter | flutter_bloc (`flutter-bloc`), get_it (`get-it`) |
 
 ## Stacks: start a project with everything in one go
 
@@ -137,10 +150,19 @@ dkit stack install next-hono --project web --without drizzle --with prisma   # s
 | `solid-hono` | create-solid (Vite + TS) | Node.js, PostgreSQL | Hono, Kysely, pg, dbmate |
 | `hono-api` | create-hono (Node.js template) | Node.js, PostgreSQL | Hono, Drizzle, pg |
 | `express-prisma` | your package manager's `init` | Node.js, PostgreSQL | Express, Prisma |
+| `next-drizzle-auth` | create-next-app | Node.js, PostgreSQL | Better Auth, Drizzle, pg |
+| `react-hono` | create-vite (react-ts) | Node.js, PostgreSQL | Hono, pg |
+| `nest-prisma-redis` | the Nest CLI (`nest new`) | Node.js, PostgreSQL, Redis | Prisma, ioredis |
+| `express-kysely` | your package manager's `init` | Node.js, PostgreSQL | Express, Kysely, pg |
+| `next-saas` | create-next-app | Node.js | Better Auth, Stripe, Resend |
+| `fastapi-sqlalchemy` | a `.venv`, `requirements.txt` and FastAPI's hello-world `main.py` | Python, PostgreSQL | FastAPI, SQLAlchemy, psycopg |
+| `gin-redis` | `go mod init` and Gin's hello-world `main.go` | Go, PostgreSQL, Redis | Gin, pgx, go-redis |
+| `flutter-bloc` | `flutter create` | Flutter | flutter_bloc, get_it |
 
 How it works:
 
-- **New project** (`--project <new-folder>`): installs the tools that are missing, runs the framework's own official starter without prompts, then adds the libraries with the project's package manager (`--pm` to choose; npm by default). The folder must not exist yet or be empty.
+- **New project** (`--project <new-folder>`): installs the tools that are missing, runs the framework's own official starter without prompts, then adds the libraries with the project's package manager (`--pm` to choose for JavaScript stacks; npm by default). FastAPI and Go have no official generator, so dkit writes only the hello-world file from their own tutorials. The folder must not exist yet or be empty.
+- **On Windows, Smart App Control** (or a company policy) can block Python packages that include compiled parts, such as SQLAlchemy and psycopg. You'll see `ImportError: DLL load failed ... An Application Control policy has blocked this file`. That's a Windows security setting, not dkit; the project itself is set up correctly.
 - **Existing project** (you're inside one): no starter; only the missing tools and libraries are added.
 - Everything is picked by default; untick what you don't want, or use `--without` / `--with`. Already-installed PostgreSQL, Node.js etc. are detected and left alone.
 - `--dry-run` shows every command first.

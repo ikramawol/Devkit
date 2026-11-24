@@ -6,7 +6,7 @@ import { prereqLine } from "../core/engine.js";
 import { LEVELS, maturityOf } from "../core/maturity.js";
 import { checkPrereqs, type PrereqCheck } from "../core/prereqs.js";
 import { c } from "../utils/logger.js";
-import { describePackages, detectInProject } from "../core/project.js";
+import { ECOSYSTEM_LABEL, describePackages, detectInProject, itemEcosystem } from "../core/project.js";
 import { makeContext, resolveProject } from "./context.js";
 
 export function registerDoctor(program: Command) {
@@ -31,7 +31,7 @@ export function registerDoctor(program: Command) {
           ...s.status,
           prereqs: s.prereqs.map(({ key, label, ok, fixable, hint }) => ({ key, label, ok, fixable, hint: ok ? undefined : hint })),
         }));
-        const libraries = project ? CATALOG.filter((i) => i.kind === "project").map((i) => detectInProject(i, project)) : [];
+        const libraries = project ? CATALOG.filter((i) => i.kind === "project" && itemEcosystem(i) === project.ecosystem).map((i) => detectInProject(i, project)) : [];
         const proj = project ? { dir: project.dir, pm: project.pm, libraries } : null;
         console.log(JSON.stringify({ platform: ctx.platform, tools, project: proj }, null, 2));
         return;
@@ -53,8 +53,8 @@ export function registerDoctor(program: Command) {
       }
 
       if (project) {
-        console.log(`\n${c.bold(`Project: ${project.name ?? project.dir}`)}  ${c.dim(`${project.dir} · ${project.pm}`)}`);
-        for (const item of CATALOG.filter((i) => i.kind === "project")) {
+        console.log(`\n${c.bold(`Project: ${project.name ?? project.dir}`)}  ${c.dim(`${project.dir} · ${ECOSYSTEM_LABEL[project.ecosystem]} · ${project.pm}`)}`);
+        for (const item of CATALOG.filter((i) => i.kind === "project" && itemEcosystem(i) === project.ecosystem)) {
           const s = detectInProject(item, project);
           const mark = s.installed ? c.green("✓") : c.dim("·");
           const detail = s.installed ? s.version ?? "" : c.dim("not in this project");

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { Logger } from "../utils/logger.js";
 import type { Confirm } from "../utils/prompt.js";
 import { c } from "../utils/logger.js";
@@ -6,7 +7,8 @@ import { CATALOG, getItem, requiresFor, type CatalogItem } from "./catalog.js";
 import { clearWingetCache, detectItem, type DetectDeps, type ToolStatus } from "./detect.js";
 import { checkPrereqs, describeFix, fixPrereq, type FixResult, type PrereqCheck } from "./prereqs.js";
 import {
-  addCommand, allPackages, describeAdd, detectInProject, pmRequires, readProject, type ProjectInfo,
+  ECOSYSTEM_LABEL, addCommand, allPackages, describeAdd, detectInProject, ensureVenv, itemEcosystem, pmRequires, readProject,
+  recordRequirements, type ProjectInfo,
 } from "./project.js";
 
 /** Which project project-level resources (Hono, Kysely...) go into. */
@@ -43,6 +45,8 @@ export interface InstallPlan {
   project?: ProjectInfo;
   /** Project resources asked for, but there's no project to put them in. */
   needsProject: CatalogItem[];
+  /** Libraries for another kind of project (a Go library asked for in a JavaScript project). */
+  wrongProject: CatalogItem[];
 }
 
 export type Outcome = "installed" | "set-up" | "needs-new-terminal" | "unverified" | "failed" | "skipped";
@@ -60,7 +64,7 @@ export function buildPlan(ids: string[], ctx: DetectDeps & ProjectTarget): Insta
   const os = ctx.platform.os;
   const plan: InstallPlan = {
     toInstall: [], addedDeps: [], alreadyInstalled: [], manual: [], unknown: [], prereqs: {}, repair: [], blocked: [],
-    projectAdd: [], project: ctx.project, needsProject: [],
+    projectAdd: [], project: ctx.project, needsProject: [], wrongProject: [],
   };
   const statusCache = new Map<string, ToolStatus>();
   const status = (item: CatalogItem) => {
@@ -86,9 +90,10 @@ export function buildPlan(ids: string[], ctx: DetectDeps & ProjectTarget): Insta
     const item = getItem(id);
     if (!item) return void plan.unknown.push(id);
 
-    // Project resources go into package.json with the project's own package manager.
+    // Project resources go into the project with its own package manager (npm..., pip, go get, flutter pub).
     if (item.kind === "project") {
       if (!ctx.project) return void plan.needsProject.push(item);
+      if (itemEcosystem(item) !== ctx.project.ecosystem) return void plan.wrongProject.push(item);
       const s = detectInProject(item, ctx.project);
       if (s.installed) return void plan.alreadyInstalled.push(s);
       visitDeps(pmRequires(ctx.project.pm));
@@ -169,9 +174,13 @@ export function printPlan(plan: InstallPlan, ctx: EngineContext) {
     const where = ctx.projectDir ?? process.cwd();
     log.warn(
       `${plan.needsProject.map((i) => i.name).join(", ")} ${plan.needsProject.length === 1 ? "goes" : "go"} into a project, ` +
-      `but there's no package.json in ${where}.\n` +
+      `but there's no project in ${where} (no package.json, requirements.txt, go.mod or pubspec.yaml).\n` +
       `  cd into your project, or use --project <folder>.`,
     );
+  }
+  if (plan.wrongProject.length && plan.project) {
+    const kinds = [...new Set(plan.wrongProject.map((i) => ECOSYSTEM_LABEL[itemEcosystem(i)]))].join("/");
+    log.warn(`${plan.wrongProject.map((i) => i.name).join(", ")}: ${kinds} libraries, but ${plan.project.dir} is a ${ECOSYSTEM_LABEL[plan.project.ecosystem]} project, so they're left out.`);
   }
   if (plan.manual.length) {
     log.info(c.bold("\nInstall these yourself:"));
@@ -298,15 +307,20 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
     } else {
       runner.refreshPath();
       const errors: string[] = [];
-      for (const cmd of projectCommands(plan)) {
+      // Python: packages go into the project's own .venv, never the system Python.
+      const venvError = p.pm === "pip" ? ensureVenv(p.dir, platform.os, runner, ctx.exists ?? existsSync) : null;
+      if (venvError) errors.push(venvError);
+      for (const cmd of venvError ? [] : projectCommands(plan)) {
         // Dev packages run after regular ones, so a version to match (e.g. @prisma/client's) is known by now.
         const packages = cmd.dev ? pinSameVersion(plan, cmd.packages, p) : cmd.packages;
         log.step(`Adding to ${p.name ?? p.dir}: ${describeAdd(p.pm, packages, cmd.dev)}`);
-        const { command, args } = addCommand(p.pm, packages, cmd.dev);
+        const { command, args } = addCommand(p.pm, packages, cmd.dev, { dir: p.dir, os: platform.os });
         const r = runner.run(command, args, { inherit: true, cwd: p.dir });
         if (!r.ok) errors.push(r.error ?? `${p.pm} exited with ${exitText(r.code)}`);
+        // pip doesn't write requirements.txt itself; only what really installed is recorded.
+        else if (p.pm === "pip") recordRequirements(p.dir, packages);
       }
-      // Verify against package.json itself rather than trusting exit codes.
+      // Verify against the project's own files (package.json, requirements.txt, go.mod, pubspec.yaml), not exit codes.
       const after = readProject(p.dir, { pm: p.pm });
       for (const item of plan.projectAdd) {
         const s = after ? detectInProject(item, after) : undefined;
@@ -320,8 +334,7 @@ export async function executePlan(plan: InstallPlan, ctx: EngineContext): Promis
             report.notes.push(`${item.name} also needs ${sug.what}, e.g. ${sug.ids.map((id) => getItem(id)?.name ?? id).join(" or ")}: dkit install ${sug.ids[0]}`);
           }
         } else {
-          const missing = allPackages(item).filter((pkg) => !(after && pkg in after.deps));
-          const message = errors[0] ?? `${missing.join(", ")} not in package.json`;
+          const message = errors[0] ?? `${allPackages(item).join(", ")} didn't show up in the project`;
           log.error(`${item.name}: ${message}`);
           report.results.push({ id: item.id, name: item.name, outcome: "failed", message });
         }
@@ -343,6 +356,7 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
   line(c.red("Skipped:"), report.results.filter((r) => r.outcome === "skipped").map((r) => `${r.name} (${r.message})`));
   line(c.red("Needs you first:"), plan.blocked.map((i) => i.name));
   line(c.red("No project to add to:"), plan.needsProject.map((i) => i.name));
+  line(c.red("Wrong kind of project for:"), plan.wrongProject.map((i) => i.name));
   line("Install yourself:", plan.manual.map((m) => m.item.name));
   if (report.restartFor.length) {
     log.warn(c.bold(`Restart Windows to finish setting up: ${report.restartFor.join(", ")}`));
@@ -357,7 +371,10 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
 export async function installTools(ids: string[], ctx: EngineContext): Promise<InstallReport | null> {
   const plan = buildPlan(ids, ctx);
   printPlan(plan, ctx);
-  const noProject = plan.needsProject.map((i) => ({ id: i.id, name: i.name, outcome: "skipped" as const, message: "no project" }));
+  const noProject = [
+    ...plan.needsProject.map((i) => ({ id: i.id, name: i.name, outcome: "skipped" as const, message: "no project" })),
+    ...plan.wrongProject.map((i) => ({ id: i.id, name: i.name, outcome: "skipped" as const, message: "wrong kind of project" })),
+  ];
   if (!plan.toInstall.length && !plan.repair.length && !plan.projectAdd.length) {
     if (!noProject.length) ctx.log.info("\nNothing to install.");
     return { results: noProject, notes: [], restartFor: [] };

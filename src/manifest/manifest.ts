@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { OS } from "../core/platform.js";
 import { CATALOG, getItem, type Method } from "../core/catalog.js";
 import { detectItem, type DetectDeps } from "../core/detect.js";
-import { PACKAGE_MANAGERS, detectInProject, type PackageManager, type ProjectInfo } from "../core/project.js";
+import { ALL_PACKAGE_MANAGERS, detectInProject, type PackageManager, type ProjectInfo } from "../core/project.js";
 import { EDITORS } from "../migrate/editors.js";
 import { REDACTED } from "../migrate/bundle.js";
 import { backupFileInfo, unpackBackup } from "../migrate/archive.js";
@@ -143,7 +143,7 @@ export function validateManifest(data: unknown, label = "manifest"): Manifest {
       bad("secrets may only hold a name, where it's used, and its kind");
   }
   if (m.project !== undefined) {
-    if (!isObj(m.project) || !PACKAGE_MANAGERS.includes(m.project.pm)) bad("project.pm must be npm, pnpm, yarn or bun");
+    if (!isObj(m.project) || !ALL_PACKAGE_MANAGERS.includes(m.project.pm)) bad(`project.pm must be one of ${ALL_PACKAGE_MANAGERS.join(", ")}`);
     checkResources(m.project.libraries, "project.libraries");
   }
   return m;

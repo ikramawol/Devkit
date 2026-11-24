@@ -2,7 +2,9 @@ import path from "node:path";
 import type { Command } from "commander";
 import { getItem } from "../core/catalog.js";
 import { detectItem } from "../core/detect.js";
-import { PACKAGE_MANAGERS, detectInProject, readProject, type PackageManager } from "../core/project.js";
+import {
+  ECOSYSTEM_LABEL, ECOSYSTEM_PM, PACKAGE_MANAGERS, detectInProject, itemEcosystem, readProject, type NodePackageManager, type PackageManager,
+} from "../core/project.js";
 import {
   customizeRecipe, findRecipe, installStack, listRecipes, saveRecipe, stacksDir, type Recipe,
 } from "../core/stack.js";
@@ -13,7 +15,7 @@ import { makeContext, type CommonOpts } from "./context.js";
 const list = (v: string | undefined) => (v ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 function checkPm(pm?: string): PackageManager | undefined {
-  if (pm && !PACKAGE_MANAGERS.includes(pm as PackageManager)) throw new Error(`Unknown package manager "${pm}". Use one of: ${PACKAGE_MANAGERS.join(", ")}.`);
+  if (pm && !PACKAGE_MANAGERS.includes(pm as NodePackageManager)) throw new Error(`Unknown package manager "${pm}". Use one of: ${PACKAGE_MANAGERS.join(", ")}.`);
   return pm as PackageManager | undefined;
 }
 
@@ -34,12 +36,13 @@ export function registerStack(program: Command) {
       ];
       for (const team of [...new Set(recipes.filter((r) => r.source === "team").map((r) => r.team!))])
         groups.push([`\nTeam ${team}  ${c.dim("(use as " + team + "/<id> if the id clashes)")}`, recipes.filter((r) => r.team === team)]);
+      const width = Math.max(16, ...recipes.map((r) => r.id.length));
       for (const [title, rs] of groups) {
         if (!rs.length) continue;
         console.log(c.bold(title));
         for (const r of rs) {
-          console.log(`  ${c.cyan(r.id.padEnd(16))} ${r.name}`);
-          if (r.description) console.log(`  ${" ".repeat(16)} ${c.dim(r.description)}`);
+          console.log(`  ${c.cyan(r.id.padEnd(width))} ${r.name}`);
+          if (r.description) console.log(`  ${" ".repeat(width)} ${c.dim(r.description)}`);
         }
       }
       for (const p of problems) ctx.log.warn(`Skipped a saved stack: ${p}`);
@@ -57,10 +60,14 @@ export function registerStack(program: Command) {
       if (r.description) console.log(r.description);
 
       const starter = r.starter ? getStarter(r.starter) : undefined;
-      console.log(`\n${c.bold("New project starter")}`);
+      // What kind of project this stack makes, from its starter or its libraries.
+      const eco = starter?.ecosystem ?? (r.libraries[0] ? itemEcosystem(getItem(r.libraries[0])!) : "node");
+      const pm: PackageManager = eco === "node" ? r.pm ?? "npm" : ECOSYSTEM_PM[eco];
+      const how: Record<string, string> = { pip: "pip, inside .venv", go: "go get", flutter: "flutter pub add" };
+      console.log(`\n${c.bold("New project starter")}${eco !== "node" ? c.dim(`  (a ${ECOSYSTEM_LABEL[eco]} project; libraries are added with ${how[pm]})`) : ""}`);
       if (starter) {
         console.log(`  ${starter.name}: ${c.dim(starter.description)}`);
-        for (const s of describeSteps(starter, r.pm ?? "npm", "<folder>")) console.log(c.dim(`  runs: ${s}`));
+        for (const s of describeSteps(starter, pm, "<folder>", ctx.platform.os)) console.log(c.dim(`  ${s.startsWith("writes ") ? "" : "runs: "}${s}`));
       } else console.log(c.dim("  none: this stack can only be added to an existing project"));
 
       console.log(`\n${c.bold("Machine tools")}`);
@@ -68,10 +75,12 @@ export function registerStack(program: Command) {
         const s = detectItem(getItem(id)!, ctx);
         console.log(`  ${s.installed ? c.green("✓") : c.dim("·")} ${getItem(id)!.name.padEnd(22)} ${c.dim(s.installed ? s.version ?? "installed" : "not installed")}`);
       }
-      console.log(`\n${c.bold("Libraries")}${project ? c.dim(`  (checked in ${project.name ?? project.dir})`) : ""}`);
+      // Only check the current folder when it's the same kind of project as the stack.
+      const here = project?.ecosystem === eco ? project : undefined;
+      console.log(`\n${c.bold("Libraries")}${here ? c.dim(`  (checked in ${here.name ?? here.dir})`) : ""}`);
       for (const id of r.libraries) {
         const item = getItem(id)!;
-        const s = project ? detectInProject(item, project) : undefined;
+        const s = here ? detectInProject(item, here) : undefined;
         const mark = s?.installed ? c.green("✓") : c.dim("·");
         const deps = [...(item.packages?.deps ?? []), ...(item.packages?.dev ?? []).map((d) => `${d} (dev)`)].join(", ");
         console.log(`  ${mark} ${item.name.padEnd(22)} ${c.dim(s?.installed ? `in project ${s.version ?? ""}` : deps)}`);

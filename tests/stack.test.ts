@@ -64,7 +64,11 @@ const stackCtx = (runner: ReturnType<typeof devMachine>["runner"], extra = {}) =
 // ── Recipes ─────────────────────────────────────────────────
 
 test("every built-in stack only uses real catalog ids and starters", () => {
-  assert.deepEqual(BUILTIN_RECIPES.map((r) => r.id), ["next-hono", "solid-hono", "hono-api", "express-prisma"]);
+  assert.deepEqual(BUILTIN_RECIPES.map((r) => r.id), [
+    "next-hono", "solid-hono", "hono-api", "express-prisma",
+    "next-drizzle-auth", "react-hono", "nest-prisma-redis", "express-kysely",
+    "fastapi-sqlalchemy", "gin-redis", "flutter-bloc", "next-saas",
+  ]);
   for (const r of BUILTIN_RECIPES) assert.doesNotThrow(() => validateRecipe(r, r.id), r.id);
 });
 
