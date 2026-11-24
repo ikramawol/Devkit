@@ -27,8 +27,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "engines": {
