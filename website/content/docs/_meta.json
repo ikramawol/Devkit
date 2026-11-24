@@ -1,0 +1,94 @@
+[
+  {
+    "group": "Getting started",
+    "pages": [
+      {
+        "id": "intro",
+        "title": "Introduction"
+      },
+      {
+        "id": "quickstart",
+        "title": "Quick start"
+      },
+      {
+        "id": "setup",
+        "title": "Installation"
+      }
+    ]
+  },
+  {
+    "group": "Guides",
+    "pages": [
+      {
+        "id": "install",
+        "title": "Installing tools"
+      },
+      {
+        "id": "maintain",
+        "title": "Diagnose and update"
+      },
+      {
+        "id": "libraries",
+        "title": "Project libraries"
+      },
+      {
+        "id": "stacks",
+        "title": "Stacks"
+      },
+      {
+        "id": "manifest",
+        "title": "Scan and compare"
+      },
+      {
+        "id": "migrate",
+        "title": "Migrate"
+      },
+      {
+        "id": "team",
+        "title": "Team setups"
+      },
+      {
+        "id": "snapshots",
+        "title": "Snapshots"
+      },
+      {
+        "id": "sync",
+        "title": "Sync your PCs"
+      }
+    ]
+  },
+  {
+    "group": "Reference",
+    "pages": [
+      {
+        "id": "commands",
+        "title": "Command reference"
+      },
+      {
+        "id": "catalog",
+        "title": "Supported tools"
+      },
+      {
+        "id": "files",
+        "title": "Files and paths"
+      }
+    ]
+  },
+  {
+    "group": "Project",
+    "pages": [
+      {
+        "id": "safety",
+        "title": "Safety and security"
+      },
+      {
+        "id": "troubleshooting",
+        "title": "Troubleshooting"
+      },
+      {
+        "id": "contributing",
+        "title": "Contributing"
+      }
+    ]
+  }
+]

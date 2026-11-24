@@ -4,7 +4,8 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/"] },
+  // website/ is its own Next.js project, with its own setup.
+  { ignores: ["dist/", "node_modules/", "website/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
