@@ -47,7 +47,7 @@ export default function Home() {
               <h1>{hero.title[0]}<br /><em>{hero.title[1]}</em></h1>
               <p className="mu" style={{ fontSize: 17, maxWidth: "30em" }}>{hero.text}</p>
               <InstallBox commands={hero.install} />
-              <p className="mu" style={{ marginTop: 12, fontSize: 13 }}>Needs Node.js 20+. Installs the <code>dkit</code> command. Free and MIT licensed.</p>
+              <p className="mu" style={{ marginTop: 12, fontSize: 13 }}>Needs Node.js 22+. Installs the <code>dkit</code> command. Free and MIT licensed.</p>
             </div>
             <Terminal steps={home.terminal} />
           </div>

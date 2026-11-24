@@ -25,7 +25,7 @@ dkit follows one rule: **plan, confirm, act.** It shows what it will do, asks yo
 
 ## Requirements and platforms
 
-- Node.js 20 or newer.
+- Node.js 22 or newer.
 - Windows (winget, PowerShell), macOS (Homebrew) or Linux on Debian/Ubuntu (apt), including WSL.
 
 ## Where to go next
