@@ -284,6 +284,10 @@ footer{position:relative;overflow:hidden;margin-top:70px;border-top:1px solid va
 
 .whb{display:flex;gap:7px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--ln);font:12px var(--mo);color:var(--mu)}
 .whb i{width:10px;height:10px;border-radius:50%;background:#2c2c32}
+/* macOS window buttons: close, minimise, zoom */
+.whb i:nth-child(1){background:#ff5f57}
+.whb i:nth-child(2){background:#febc2e}
+.whb i:nth-child(3){background:#28c840}
 .whb span{margin-left:8px}
 
 .whp{display:none}
@@ -614,7 +618,7 @@ nav .l{align-items:center}
 }
 
 /* Terminal lines are one <div> each: keep empty lines one line tall. */
-pre>div:empty::before{content:" a0"}
+pre>div:empty::before{content:"\00a0"}
 
 /* Current section in the header */
 nav .l a.cur{color:var(--tx)}
@@ -629,3 +633,7 @@ nav .l a.cur{color:var(--tx)}
 .dxl>*{min-width:0}
 @media(max-width:860px){.dmode .dxl{grid-template-columns:minmax(0,1fr)}}
 .hero>*{min-width:0}
+
+/* "Coming soon" note under the install box */
+.soon{display:flex;gap:10px;align-items:flex-start;max-width:30em;margin:14px 0 0;padding:10px 14px;border:1px dashed color-mix(in srgb,var(--ac) 45%,transparent);border-radius:10px;background:var(--ad);color:var(--tx2);font-size:13.5px;line-height:1.55}
+.soon span{flex:none;font:600 11px/20px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ac);border:1px solid color-mix(in srgb,var(--ac) 45%,transparent);border-radius:99px;padding:0 8px;margin-top:1px}

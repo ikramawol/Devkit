@@ -21,6 +21,8 @@ dkit --help          # all commands
 
 Update with `npm install -g devsetupkit-cli@latest`, remove with `npm uninstall -g devsetupkit-cli`.
 
+> **Coming soon: install without Node.js.** We're building a one-line installer that sets up dkit on a brand-new computer, with nothing to install first. Stay tuned.
+
 ## Setup from source
 
 Build dkit from the repository (the original instructions target Windows and PowerShell):

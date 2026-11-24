@@ -12,7 +12,11 @@
       "yarn": "yarn global add devsetupkit-cli",
       "bun": "bun add -g devsetupkit-cli"
     },
-    "note": "Needs Node.js 22+. Installs the dkit command. Free and MIT licensed."
+    "note": "Needs Node.js 22+. Installs the dkit command. Free and MIT licensed.",
+    "comingSoon": {
+      "label": "Coming soon",
+      "text": "Install dkit without Node.js. We're building a one-line installer that sets up everything on a brand-new computer, with nothing to install first. Stay tuned."
+    }
   },
   "stats": [
     [
