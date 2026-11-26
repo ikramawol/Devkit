@@ -23,6 +23,8 @@ export interface EngineContext extends DetectDeps, ProjectTarget {
   log: Logger;
   confirm: Confirm;
   dryRun: boolean;
+  /** Pause before retrying (extensions); tests pass one that doesn't wait. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface InstallPlan {
@@ -369,6 +371,8 @@ export function printReport(report: InstallReport, plan: InstallPlan, log: Logge
 
 /** Plan → show → confirm → run → report. Shared by `install`, `claude` and `migrate restore`. */
 export async function installTools(ids: string[], ctx: EngineContext): Promise<InstallReport | null> {
+  // Detection runs several commands per tool and can take a while; say so, so it doesn't look stuck.
+  ctx.log.step(`Checking ${ids.length} tool(s) on this machine…`);
   const plan = buildPlan(ids, ctx);
   printPlan(plan, ctx);
   const noProject = [

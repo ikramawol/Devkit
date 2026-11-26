@@ -7,7 +7,7 @@ import { installTools, type EngineContext } from "../core/engine.js";
 import { runMethod } from "../adapters/methods.js";
 import type { Select } from "../utils/prompt.js";
 import { c } from "../utils/logger.js";
-import { EDITORS } from "./editors.js";
+import { EDITORS, installExtensions } from "./editors.js";
 import { NPM_NAME, listNpmGlobals, readGitConfig } from "../manifest/discover.js";
 import { convertProfile, convertedProfileTarget, transformGit } from "./transform.js";
 import {
@@ -127,10 +127,12 @@ export async function restoreBackup(b: Backup, ctx: RestoreContext): Promise<Res
         );
         const missing = eb.extensions.filter((e) => !have.has(e.toLowerCase()));
         log.info(`  ${eb.extensions.length - missing.length} extensions already installed, ${missing.length} to add`);
-        for (const ext of missing) {
-          if (dryRun) { log.info(`  ${c.dim("would install")} ${ext}`); continue; }
-          const r = runner.run(def.cli, ["--install-extension", ext, "--force"]);
-          r.ok ? log.ok(ext) : log.warn(`${ext}: could not install (it may not exist for ${platform.os})`);
+        if (dryRun) for (const ext of missing) log.info(`  ${c.dim("would install")} ${ext}`);
+        else {
+          const failed = await installExtensions(def.cli, missing, {
+            runner, log, force: true, sleep: ctx.sleep, otherOs: crossOs ? platform.os : undefined,
+          });
+          if (failed.length) report.notes.push(`${failed.length} ${eb.name} extension(s) didn't install. Run \`dkit migrate restore <file> --only editors\` again later; it only adds the missing ones.`);
         }
       } else if (eb.extensions.length) {
         report.notes.push(`${eb.name} is not installed (or \`${def.cli}\` isn't on PATH): ${eb.extensions.length} extensions were not installed. Re-run restore with --only editors after installing it.`);

@@ -21,17 +21,48 @@ export type Select = (message: string, choices: Choice[]) => Promise<string[]>;
 
 const interactive = () => stdin.isTTY && stdout.isTTY;
 
+/**
+ * An answer that arrives this soon after the question was printed was typed
+ * before it appeared (e.g. Enter pressed while dkit was busy checking tools).
+ */
+export const STALE_INPUT_MS = 250;
+
+/** One line from the terminal; null if input closed. */
+export type ReadLine = (prompt: string) => Promise<string | null>;
+
+const readTerminalLine: ReadLine = (prompt) => {
+  const rl = createInterface({ input: stdin, output: stdout });
+  return new Promise((resolve) => {
+    rl.once("close", () => resolve(null));
+    rl.question(prompt).then(resolve, () => resolve(null)).finally(() => rl.close());
+  });
+};
+
+/**
+ * Ask yes/no, defaulting to no. Input typed before the question appeared is
+ * ignored and the question is asked again, so a stray Enter can't answer it.
+ */
+export async function askYesNo(question: string, readLine: ReadLine, now: () => number = Date.now): Promise<boolean> {
+  let prompt = `${question} [y/N] `;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const shown = now();
+    const answer = await readLine(prompt);
+    if (answer === null) return false;
+    if (now() - shown < STALE_INPUT_MS) {
+      prompt = `${question.trim()} [y/N] `;
+      continue;
+    }
+    const a = answer.trim().toLowerCase();
+    return a === "y" || a === "yes";
+  }
+  return false;
+}
+
 export function makeConfirm(opts: { yes?: boolean }): Confirm {
   return async (question) => {
     if (opts.yes) return true;
     if (!interactive()) return false; // never hang in CI or piped runs
-    const rl = createInterface({ input: stdin, output: stdout });
-    try {
-      const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
-      return answer === "y" || answer === "yes";
-    } finally {
-      rl.close();
-    }
+    return askYesNo(question, readTerminalLine);
   };
 }
 
