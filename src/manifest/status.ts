@@ -1,6 +1,6 @@
 import { getItem } from "../core/catalog.js";
 import { installTools, type EngineContext } from "../core/engine.js";
-import { EDITORS } from "../migrate/editors.js";
+import { EDITORS, installExtensions } from "../migrate/editors.js";
 import { c, type Logger } from "../utils/logger.js";
 import { compareSettings, differenceCount, type Comparison, type Manifest, type ResourceDiff } from "./manifest.js";
 
@@ -151,10 +151,7 @@ export async function fixDifferences(cmp: Comparison, ctx: EngineContext): Promi
       for (const e of editors) {
         const cli = EDITORS.find((d) => d.id === e.id)!.cli;
         log.step(`${e.name} extensions`);
-        for (const ext of e.missing) {
-          const r = runner.run(cli, ["--install-extension", ext]);
-          if (!r.ok) failed.push(`${ext} (may not exist for this OS or editor)`);
-        }
+        for (const f of await installExtensions(cli, e.missing, { runner, log, sleep: ctx.sleep })) failed.push(`${f.ext} (${f.reason})`);
       }
       if (npm.length) {
         log.step(`npm install -g ${npm.join(" ")}`);

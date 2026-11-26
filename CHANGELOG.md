@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+Fixes found while restoring a real backup onto a second PC.
+
+- **Extensions that fail to install are tried again** after a 10-second pause. Failures were usually the VS Code Marketplace limiting fast downloads, not missing extensions.
+- **The real reason is shown** when an extension still won't install (VS Code's own message, without Node's warnings). "It may not exist for this OS" now only appears when restoring from another OS.
+- **A stray Enter can't cancel an install anymore.** Anything typed before a yes/no question appears is ignored, and the question is asked again.
+- **"Checking N tool(s) on this machine…"** is shown while dkit looks at what's installed, so it no longer looks frozen.
+
 ## 0.3.0
 
 The biggest release yet: dkit now describes, backs up, syncs and maintains your setup, onboards teams, and starts projects in JavaScript, Python, Go and Flutter.
